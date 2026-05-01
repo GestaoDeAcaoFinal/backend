@@ -113,14 +113,6 @@ O sistema segue arquitetura em camadas:
 
 ---
 
-## 📊 Diagrama
-
-O diagrama da estrutura do projeto está disponível no arquivo:
-
-```
-gestaodeacao.png
-```
-
 ---
 
 **Justificativa das APIs**
