@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class GestaoDeAcaoApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(GestaoDeAcaoApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(GestaoDeAcaoApplication.class, args);
+    }
 
 }
