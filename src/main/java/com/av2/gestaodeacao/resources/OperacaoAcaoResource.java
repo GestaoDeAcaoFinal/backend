@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@CrossOrigin(origins = "http://localhost:4200")
 @RestController
 @RequestMapping("/operacoes")
 public class OperacaoAcaoResource {
@@ -35,12 +36,14 @@ public class OperacaoAcaoResource {
     @PostMapping("/vender/{acaoId}")
     public OperacaoAcao vender(
             @PathVariable Long acaoId,
-            @RequestParam Integer quantidade
+            @RequestParam Integer quantidade,
+            @RequestParam Double precoVenda
     ) {
 
         return service.vender(
                 acaoId,
-                quantidade
+                quantidade,
+                precoVenda
         );
     }
 

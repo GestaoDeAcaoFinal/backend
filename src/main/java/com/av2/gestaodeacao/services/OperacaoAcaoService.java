@@ -62,14 +62,14 @@ public class OperacaoAcaoService {
                         / novaQuantidadeTotal;
 
         operacaoAcao.setPrecoMedio(precoMedio);
-
         operacaoAcao.setValorTotal(valorNovaCompra);
 
         return operacaoRepository.save(operacaoAcao);
     }
 
     public OperacaoAcao vender(Long acaoId,
-                               Integer quantidade) {
+                               Integer quantidade,
+                               Double precoVenda) {
 
         Acao acao = repository.findById(acaoId)
                 .orElseThrow(() ->
@@ -102,15 +102,14 @@ public class OperacaoAcaoService {
             throw new RuntimeException("Quantidade insuficiente");
         }
 
-        // AGORA PEGA AUTOMATICAMENTE A COTAÇÃO ATUAL
-        double precoVenda = acao.getCotacaoAtual();
-
         double precoMedio = compras
                 .get(compras.size() - 1)
                 .getPrecoMedio();
 
         double lucro =
-                (precoVenda - precoMedio) * quantidade;
+                Math.round(
+                        ((precoVenda - precoMedio) * quantidade) * 100.0
+                ) / 100.0;
 
         OperacaoAcao venda = new OperacaoAcao();
 

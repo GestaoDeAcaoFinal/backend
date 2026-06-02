@@ -1,6 +1,7 @@
 package com.av2.gestaodeacao.services;
 
 import com.av2.gestaodeacao.cliente.AcaoCliente;
+import com.av2.gestaodeacao.cliente.TwelveDataCliente;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.Corretora;
 import com.av2.gestaodeacao.domains.dtos.AcaoRequestDTO;
@@ -22,6 +23,12 @@ public class AcaoService {
     @Autowired
     private CorretoraRepository corretoraRepository;
 
+    @Autowired
+    private AcaoCliente cliente;
+
+    @Autowired
+    private TwelveDataCliente twelveDataCliente;
+
     public Acao salvar(AcaoRequestDTO dto) {
 
         Acao a = new Acao();
@@ -40,36 +47,62 @@ public class AcaoService {
         a.setCorretoraRelacionada(corretora);
 
         try {
-            Map response = cliente.buscarAcao(a.getTicker());
 
-            List results = (List) response.get("results");
+            if (ehTickerAmericano(a.getTicker())) {
 
-            if (results == null || results.isEmpty()) {
-                throw new RuntimeException("Ticker inválido");
-            }
+                Map response =
+                        twelveDataCliente.buscarAcao(a.getTicker());
 
-            Map dados = (Map) results.get(0);
+                if (response.get("code") != null) {
+                    throw new RuntimeException("Ticker inválido");
+                }
 
-            a.setNomeEmpresa((String) dados.get("longName"));
+                a.setNomeEmpresa(
+                        response.get("name").toString());
 
-            Object preco = dados.get("regularMarketPrice");
-            if (preco instanceof Integer) {
-                a.setCotacaoAtual(((Integer) preco).doubleValue());
-            } else {
-                a.setCotacaoAtual((Double) preco);
-            }
+                a.setCotacaoAtual(
+                        Double.parseDouble(
+                                response.get("close").toString()));
 
-            a.setMoeda((String) dados.get("currency"));
+                a.setMoeda(
+                        response.get("currency").toString());
 
-            if (a.getTicker().endsWith("34")) {
                 a.setMercado("EUA");
+
             } else {
+
+                Map response =
+                        cliente.buscarAcao(a.getTicker());
+
+                List results =
+                        (List) response.get("results");
+
+                if (results == null || results.isEmpty()) {
+                    throw new RuntimeException("Ticker inválido");
+                }
+
+                Map dados =
+                        (Map) results.get(0);
+
+                a.setNomeEmpresa(
+                        dados.get("longName").toString());
+
+                a.setCotacaoAtual(
+                        Double.parseDouble(
+                                dados.get("regularMarketPrice")
+                                        .toString()));
+
+                a.setMoeda(
+                        dados.get("currency")
+                                .toString());
+
                 a.setMercado("BR");
             }
 
             a.setDataHoraCotacao(LocalDateTime.now());
 
         } catch (Exception e) {
+            e.printStackTrace();
             throw new RuntimeException("Erro ao consultar API de ações");
         }
 
@@ -82,44 +115,75 @@ public class AcaoService {
 
     public Acao buscarPorId(Long id) {
         return repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Não encontrada"));
+                .orElseThrow(() ->
+                        new RuntimeException("Não encontrada"));
     }
 
     public Acao buscarPorTicker(String ticker) {
         return repository.findByTicker(ticker)
-                .orElseThrow(() -> new RuntimeException("Não encontrada"));
+                .orElseThrow(() ->
+                        new RuntimeException("Não encontrada"));
     }
+
     public Acao atualizarCotacao(Long id) {
 
         Acao a = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ação não encontrada"));
+                .orElseThrow(() ->
+                        new RuntimeException("Ação não encontrada"));
 
         try {
-            Map response = cliente.buscarAcao(a.getTicker());
 
-            List results = (List) response.get("results");
+            if ("EUA".equals(a.getMercado())) {
 
-            if (results == null || results.isEmpty()) {
-                throw new RuntimeException("Erro ao atualizar cotação");
-            }
+                Map response =
+                        twelveDataCliente.buscarAcao(
+                                a.getTicker());
 
-            Map dados = (Map) results.get(0);
+                if (response.get("code") != null) {
+                    throw new RuntimeException(
+                            "Erro ao atualizar cotação");
+                }
 
-            Object preco = dados.get("regularMarketPrice");
-            if (preco instanceof Integer) {
-                a.setCotacaoAtual(((Integer) preco).doubleValue());
+                a.setCotacaoAtual(
+                        Double.parseDouble(
+                                response.get("close")
+                                        .toString()));
+
             } else {
-                a.setCotacaoAtual((Double) preco);
+
+                Map response =
+                        cliente.buscarAcao(a.getTicker());
+
+                List results =
+                        (List) response.get("results");
+
+                if (results == null || results.isEmpty()) {
+                    throw new RuntimeException(
+                            "Erro ao atualizar cotação");
+                }
+
+                Map dados =
+                        (Map) results.get(0);
+
+                a.setCotacaoAtual(
+                        Double.parseDouble(
+                                dados.get("regularMarketPrice")
+                                        .toString()));
             }
 
             a.setDataHoraCotacao(LocalDateTime.now());
 
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao atualizar cotação");
+            e.printStackTrace();
+            throw new RuntimeException(
+                    "Erro ao atualizar cotação");
         }
 
         return repository.save(a);
     }
-    @Autowired
-    private AcaoCliente cliente;
+
+    private boolean ehTickerAmericano(String ticker) {
+
+        return !ticker.matches(".*\\d.*");
+    }
 }
