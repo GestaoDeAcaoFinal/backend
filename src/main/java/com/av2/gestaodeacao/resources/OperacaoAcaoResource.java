@@ -1,8 +1,11 @@
 package com.av2.gestaodeacao.resources;
 
 import com.av2.gestaodeacao.domains.OperacaoAcao;
+import com.av2.gestaodeacao.domains.dtos.ResumoCarteiraDTO;
 import com.av2.gestaodeacao.services.OperacaoAcaoService;
+import jakarta.validation.constraints.Positive;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -10,6 +13,7 @@ import java.util.List;
 @CrossOrigin(origins = "http://localhost:4200")
 @RestController
 @RequestMapping("/operacoes")
+@Validated
 public class OperacaoAcaoResource {
 
     @Autowired
@@ -21,10 +25,15 @@ public class OperacaoAcaoResource {
         return service.listar();
     }
 
+    @GetMapping("/carteira")
+    public ResumoCarteiraDTO resumirCarteira() {
+        return service.resumirCarteira();
+    }
+
     @PostMapping("/comprar/{acaoId}")
     public OperacaoAcao comprar(
-            @PathVariable Long acaoId,
-            @RequestParam Integer quantidade
+            @PathVariable @Positive(message = "Id da ação deve ser positivo") Long acaoId,
+            @RequestParam @Positive(message = "Quantidade deve ser positiva") Integer quantidade
     ) {
 
         return service.comprar(
@@ -35,9 +44,9 @@ public class OperacaoAcaoResource {
 
     @PostMapping("/vender/{acaoId}")
     public OperacaoAcao vender(
-            @PathVariable Long acaoId,
-            @RequestParam Integer quantidade,
-            @RequestParam Double precoVenda
+            @PathVariable @Positive(message = "Id da ação deve ser positivo") Long acaoId,
+            @RequestParam @Positive(message = "Quantidade deve ser positiva") Integer quantidade,
+            @RequestParam @Positive(message = "Preço de venda deve ser positivo") Double precoVenda
     ) {
 
         return service.vender(
@@ -49,7 +58,7 @@ public class OperacaoAcaoResource {
 
     @GetMapping("/{acaoId}")
     public List<OperacaoAcao> listar(
-            @PathVariable Long acaoId
+            @PathVariable @Positive(message = "Id da ação deve ser positivo") Long acaoId
     ) {
 
         return service.listarHistorico(acaoId);
@@ -69,7 +78,7 @@ public class OperacaoAcaoResource {
 
     @GetMapping("/buscar/{id}")
     public OperacaoAcao buscarPorId(
-            @PathVariable Long id
+            @PathVariable @Positive(message = "Id deve ser positivo") Long id
     ) {
 
         return service.buscarPorId(id);

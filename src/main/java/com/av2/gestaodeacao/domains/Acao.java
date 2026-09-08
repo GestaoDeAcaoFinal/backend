@@ -7,6 +7,10 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
+@Table(
+        name = "acoes",
+        uniqueConstraints = @UniqueConstraint(name = "uk_acoes_ticker", columnNames = "ticker")
+)
 public class Acao {
 
     @Id

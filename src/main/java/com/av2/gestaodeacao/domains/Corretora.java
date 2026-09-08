@@ -5,12 +5,18 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Data
 @Entity
+@Table(
+        name = "corretora",
+        uniqueConstraints = @UniqueConstraint(name = "uk_corretora_cnpj", columnNames = "cnpj")
+)
 public class Corretora {
 
     @Id

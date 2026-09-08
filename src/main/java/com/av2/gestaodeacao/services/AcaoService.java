@@ -2,111 +2,59 @@ package com.av2.gestaodeacao.services;
 
 import com.av2.gestaodeacao.cliente.AcaoCliente;
 import com.av2.gestaodeacao.cliente.TwelveDataCliente;
+import com.av2.gestaodeacao.cliente.dto.BrapiQuoteResponse;
+import com.av2.gestaodeacao.cliente.dto.TwelveDataResponse;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.Corretora;
 import com.av2.gestaodeacao.domains.dtos.AcaoRequestDTO;
+import com.av2.gestaodeacao.exceptions.ConflitoException;
+import com.av2.gestaodeacao.exceptions.FalhaDeProvedorException;
+import com.av2.gestaodeacao.exceptions.RecursoNaoEncontradoException;
 import com.av2.gestaodeacao.repositories.AcaoRepository;
 import com.av2.gestaodeacao.repositories.CorretoraRepository;
+import com.av2.gestaodeacao.validation.TickerNormalizer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class AcaoService {
 
-    @Autowired
-    private AcaoRepository repository;
-
-    @Autowired
-    private CorretoraRepository corretoraRepository;
-
-    @Autowired
-    private AcaoCliente cliente;
-
-    @Autowired
-    private TwelveDataCliente twelveDataCliente;
+    @Autowired private AcaoRepository repository;
+    @Autowired private CorretoraRepository corretoraRepository;
+    @Autowired private AcaoCliente cliente;
+    @Autowired private TwelveDataCliente twelveDataCliente;
+    @Autowired private MercadoTickerClassifier mercadoTickerClassifier;
 
     public Acao salvar(AcaoRequestDTO dto) {
-
-        Acao a = new Acao();
-
-        a.setTicker(dto.getTicker().toUpperCase());
-
-        if (repository.findByTicker(a.getTicker()).isPresent()) {
-            throw new RuntimeException("Ticker já cadastrado");
+        String ticker = TickerNormalizer.normalizar(dto.getTicker());
+        if (repository.findByTicker(ticker).isPresent()) {
+            throw new ConflitoException("Ticker já cadastrado");
         }
+        Corretora corretora = corretoraRepository.findById(dto.getCorretoraId())
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Corretora não encontrada"));
+        DadosMercado dados = buscarDadosMercado(ticker);
+        validarDadosCompletos(dados);
 
-        Corretora corretora = corretoraRepository
-                .findById(dto.getCorretoraId())
-                .orElseThrow(() ->
-                        new RuntimeException("Corretora não encontrada"));
-
-        a.setCorretoraRelacionada(corretora);
-
+        Acao acao = new Acao();
+        acao.setTicker(ticker);
+        acao.setCorretoraRelacionada(corretora);
+        acao.setNomeEmpresa(dados.nomeEmpresa());
+        acao.setCotacaoAtual(dados.cotacao().doubleValue());
+        acao.setMoeda(dados.moeda());
+        acao.setMercado(dados.mercado());
+        acao.setDataHoraCotacao(LocalDateTime.now());
         try {
-
-            if (ehTickerAmericano(a.getTicker())) {
-
-                Map response =
-                        twelveDataCliente.buscarAcao(a.getTicker());
-
-                if (response.get("code") != null) {
-                    throw new RuntimeException("Ticker inválido");
-                }
-
-                a.setNomeEmpresa(
-                        response.get("name").toString());
-
-                a.setCotacaoAtual(
-                        Double.parseDouble(
-                                response.get("close").toString()));
-
-                a.setMoeda(
-                        response.get("currency").toString());
-
-                a.setMercado("EUA");
-
-            } else {
-
-                Map response =
-                        cliente.buscarAcao(a.getTicker());
-
-                List results =
-                        (List) response.get("results");
-
-                if (results == null || results.isEmpty()) {
-                    throw new RuntimeException("Ticker inválido");
-                }
-
-                Map dados =
-                        (Map) results.get(0);
-
-                a.setNomeEmpresa(
-                        dados.get("longName").toString());
-
-                a.setCotacaoAtual(
-                        Double.parseDouble(
-                                dados.get("regularMarketPrice")
-                                        .toString()));
-
-                a.setMoeda(
-                        dados.get("currency")
-                                .toString());
-
-                a.setMercado("BR");
-            }
-
-            a.setDataHoraCotacao(LocalDateTime.now());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Erro ao consultar API de ações");
+            Acao acaoSalva = repository.save(acao);
+            repository.flush();
+            return acaoSalva;
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflitoException("Ticker já cadastrado");
         }
-
-        return repository.save(a);
     }
 
     public List<Acao> listar() {
@@ -115,75 +63,72 @@ public class AcaoService {
 
     public Acao buscarPorId(Long id) {
         return repository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Não encontrada"));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Ação não encontrada"));
     }
 
     public Acao buscarPorTicker(String ticker) {
-        return repository.findByTicker(ticker)
-                .orElseThrow(() ->
-                        new RuntimeException("Não encontrada"));
+        return repository.findByTicker(TickerNormalizer.normalizar(ticker))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Ação não encontrada"));
     }
 
     public Acao atualizarCotacao(Long id) {
+        Acao acao = repository.findById(id)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Ação não encontrada"));
 
-        Acao a = repository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Ação não encontrada"));
+        BigDecimal novaCotacao = buscarCotacao(acao);
+        validarCotacaoPositiva(novaCotacao, provedorDoMercado(acao.getMercado()));
+        LocalDateTime novoInstante = LocalDateTime.now();
 
-        try {
-
-            if ("EUA".equals(a.getMercado())) {
-
-                Map response =
-                        twelveDataCliente.buscarAcao(
-                                a.getTicker());
-
-                if (response.get("code") != null) {
-                    throw new RuntimeException(
-                            "Erro ao atualizar cotação");
-                }
-
-                a.setCotacaoAtual(
-                        Double.parseDouble(
-                                response.get("close")
-                                        .toString()));
-
-            } else {
-
-                Map response =
-                        cliente.buscarAcao(a.getTicker());
-
-                List results =
-                        (List) response.get("results");
-
-                if (results == null || results.isEmpty()) {
-                    throw new RuntimeException(
-                            "Erro ao atualizar cotação");
-                }
-
-                Map dados =
-                        (Map) results.get(0);
-
-                a.setCotacaoAtual(
-                        Double.parseDouble(
-                                dados.get("regularMarketPrice")
-                                        .toString()));
-            }
-
-            a.setDataHoraCotacao(LocalDateTime.now());
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException(
-                    "Erro ao atualizar cotação");
-        }
-
-        return repository.save(a);
+        acao.setCotacaoAtual(novaCotacao.doubleValue());
+        acao.setDataHoraCotacao(novoInstante);
+        return repository.save(acao);
     }
 
-    private boolean ehTickerAmericano(String ticker) {
+    private DadosMercado buscarDadosMercado(String ticker) {
+        String mercado = mercadoTickerClassifier.classificar(ticker);
+        if ("EUA".equals(mercado)) {
+            TwelveDataResponse response = twelveDataCliente.buscarAcao(ticker);
+            return new DadosMercado(response.name(), response.close(), response.currency(), mercado, "Twelve Data");
+        }
+        BrapiQuoteResponse response = cliente.buscarAcao(ticker).results().get(0);
+        return new DadosMercado(
+                response.longName(), response.regularMarketPrice(), response.currency(), mercado, "Brapi");
+    }
 
-        return !ticker.matches(".*\\d.*");
+    private BigDecimal buscarCotacao(Acao acao) {
+        if ("EUA".equals(acao.getMercado())) {
+            return twelveDataCliente.buscarAcao(acao.getTicker()).close();
+        }
+        return cliente.buscarAcao(acao.getTicker()).results().get(0).regularMarketPrice();
+    }
+
+    private void validarDadosCompletos(DadosMercado dados) {
+        if (vazio(dados.nomeEmpresa()) || vazio(dados.moeda())) {
+            throw new FalhaDeProvedorException(dados.provedor());
+        }
+        validarCotacaoPositiva(dados.cotacao(), dados.provedor());
+    }
+
+    private void validarCotacaoPositiva(BigDecimal cotacao, String provedor) {
+        if (cotacao == null || cotacao.signum() <= 0) {
+            throw new FalhaDeProvedorException(provedor);
+        }
+    }
+
+    private String provedorDoMercado(String mercado) {
+        return "EUA".equals(mercado) ? "Twelve Data" : "Brapi";
+    }
+
+    private boolean vazio(String valor) {
+        return valor == null || valor.isBlank();
+    }
+
+    private record DadosMercado(
+            String nomeEmpresa,
+            BigDecimal cotacao,
+            String moeda,
+            String mercado,
+            String provedor
+    ) {
     }
 }
