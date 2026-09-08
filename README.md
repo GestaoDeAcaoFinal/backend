@@ -113,6 +113,21 @@ docker run --rm -p 8080:8080 -e TWELVE_DATA_API_KEY=test-key gestao-de-acao:loca
 
 Este perfil inicia dois contêineres: `frontend` e `app-host-postgresql`. O banco não roda em contêiner; o backend acessa o PostgreSQL do Windows por `host.docker.internal`.
 
+Mantenha os dois repositórios em diretórios irmãos com estes nomes, pois o contexto de build do frontend é `../gestao-acao-front`:
+
+```text
+SoftwareGestaoDeAcao/
+|-- GestaoDeAcao/       # backend; contém este compose.yaml
+`-- gestao-acao-front/  # frontend; contém Dockerfile e nginx.conf
+```
+
+Revisões mínimas compatíveis para este conjunto:
+
+- Backend `GestaoDeAcao`: `05f2735b5c24790ef61e4e1830dd89eed1d43b87`, que inclui o Dockerfile, os perfis Spring e a API da carteira; use esta revisão do README/Compose ou um descendente compatível para obter a publicação apenas em localhost.
+- Frontend `gestao-acao-front`: `26bc4517c4a9b0a2c25258e6537a69b6700b1e96`, que inclui a imagem Nginx, o proxy `/api` e a integração da carteira, ou um descendente compatível.
+
+Execute os comandos abaixo a partir do diretório `GestaoDeAcao`. As portas do perfil `host-postgresql` são publicadas somente em `127.0.0.1`; `APP_PORT` e `FRONTEND_PORT` permitem alterar os números das portas.
+
 Antes da primeira execução, confirme que existe um backup recente do database `gestaodeacao` e preencha `DB_USERNAME` e `DB_PASSWORD` no `.env`. Não versione esse arquivo.
 
 ```powershell

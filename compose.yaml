@@ -15,6 +15,8 @@ services:
   app-host-postgresql:
     <<: *app-base
     profiles: ["host-postgresql"]
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
     environment:
       <<: *app-environment
       SPRING_PROFILES_ACTIVE: dev
@@ -29,7 +31,7 @@ services:
       dockerfile: Dockerfile
     profiles: ["host-postgresql"]
     ports:
-      - "${FRONTEND_PORT:-4200}:80"
+      - "127.0.0.1:${FRONTEND_PORT:-4200}:80"
     depends_on:
       - app-host-postgresql
 
