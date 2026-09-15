@@ -1,5 +1,6 @@
 package com.av2.gestaodeacao.services;
 
+import com.av2.gestaodeacao.cliente.TwelveDataCliente;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.OperacaoAcao;
 import com.av2.gestaodeacao.domains.dtos.PosicaoCarteiraDTO;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -32,12 +34,22 @@ public class OperacaoAcaoService {
     @Autowired
     private OperacaoAcaoRepository operacaoRepository;
 
+    @Autowired
+    private TwelveDataCliente twelveDataCliente;
+
     @Transactional
     public OperacaoAcao comprar(Long acaoId, Integer quantidade) {
+        return comprar(acaoId, quantidade, null);
+    }
+
+    @Transactional
+    public OperacaoAcao comprar(Long acaoId, Integer quantidade, Double precoCompra) {
         validarPositivo(quantidade, "Quantidade");
         Acao acao = buscarAcao(acaoId);
-        Double precoUnitario = acao.getCotacaoAtual();
-        validarPrecoPositivo(precoUnitario, "A cotação atual deve ser positiva");
+        Double precoUnitario = precoCompra == null ? acao.getCotacaoAtual() : precoCompra;
+        validarPrecoPositivo(precoUnitario, precoCompra == null
+                ? "A cotação atual deve ser positiva"
+                : "Preço de compra deve ser positivo");
 
         OperacaoAcao operacao = new OperacaoAcao();
         operacao.setAcao(acao);
@@ -125,8 +137,9 @@ public class OperacaoAcaoService {
             }
         }
 
+        Map<String, BigDecimal> taxasCambioParaReal = new LinkedHashMap<>();
         List<PosicaoCarteiraDTO> posicoes = operacoesPorAcao.values().stream()
-                .map(this::criarPosicao)
+                .map(operacoes -> criarPosicao(operacoes, taxasCambioParaReal))
                 .filter(posicao -> posicao.quantidadeAtual() > 0)
                 .sorted(Comparator.comparing(
                         PosicaoCarteiraDTO::ticker,
@@ -185,7 +198,10 @@ public class OperacaoAcaoService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private PosicaoCarteiraDTO criarPosicao(List<OperacaoAcao> operacoes) {
+    private PosicaoCarteiraDTO criarPosicao(
+            List<OperacaoAcao> operacoes,
+            Map<String, BigDecimal> taxasCambioParaReal
+    ) {
         Acao acao = operacoes.get(0).getAcao();
         List<OperacaoAcao> compras = operacoes.stream()
                 .filter(operacao -> operacao.getTipoOperacao() == TipoOperacao.COMPRA)
@@ -197,16 +213,35 @@ public class OperacaoAcaoService {
         double precoMedio = posicao.quantidade() == 0
                 ? 0.0
                 : dividir(posicao.custoTotal(), posicao.quantidade());
-        BigDecimal valorAtual = multiplicar(acao.getCotacaoAtual(), posicao.quantidade());
+        BigDecimal taxaCambio = taxaCambioParaReal(acao, taxasCambioParaReal);
+        BigDecimal precoMedioEmReais = BigDecimal.valueOf(precoMedio).multiply(taxaCambio);
+        BigDecimal custoTotalEmReais = posicao.custoTotal().multiply(taxaCambio);
+        BigDecimal cotacaoAtualEmReais = BigDecimal.valueOf(acao.getCotacaoAtual()).multiply(taxaCambio);
+        BigDecimal valorAtualEmReais = cotacaoAtualEmReais.multiply(BigDecimal.valueOf(posicao.quantidade()));
 
         return new PosicaoCarteiraDTO(
                 acao.getId(),
                 acao.getTicker(),
                 posicao.quantidade(),
-                precoMedio,
-                arredondarDinheiro(posicao.custoTotal()),
-                acao.getCotacaoAtual(),
-                arredondarDinheiro(valorAtual)
+                arredondarDinheiro(precoMedioEmReais),
+                arredondarDinheiro(custoTotalEmReais),
+                arredondarDinheiro(cotacaoAtualEmReais),
+                arredondarDinheiro(valorAtualEmReais)
+        );
+    }
+
+    private BigDecimal taxaCambioParaReal(
+            Acao acao,
+            Map<String, BigDecimal> taxasCambioParaReal
+    ) {
+        String moeda = acao.getMoeda();
+        if (moeda == null || moeda.isBlank() || "BRL".equalsIgnoreCase(moeda)) {
+            return BigDecimal.ONE;
+        }
+        String moedaNormalizada = moeda.trim().toUpperCase(Locale.ROOT);
+        return taxasCambioParaReal.computeIfAbsent(
+                moedaNormalizada,
+                origem -> twelveDataCliente.buscarTaxaCambio(origem, "BRL")
         );
     }
 

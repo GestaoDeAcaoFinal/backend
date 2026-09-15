@@ -29,6 +29,23 @@ class ClientesExternosTest {
     private final ProvedorHttpExecutor executor = new ProvedorHttpExecutor();
 
     @Test
+    void buscaTaxaDeCambioEntreAMoedaDaAcaoEOReal() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TwelveDataCliente cliente = new TwelveDataCliente(
+                builder, executor, "https://twelve.test", "test-key");
+        server.expect(once(), requestTo(
+                        "https://twelve.test/exchange_rate?symbol=USD/BRL&apikey=test-key"))
+                .andRespond(withSuccess("""
+                        {"symbol":"USD/BRL","rate":5.25,"timestamp":1789344000}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThat(cliente.buscarTaxaCambio("USD", "BRL"))
+                .isEqualByComparingTo("5.25");
+        server.verify();
+    }
+
+    @Test
     void desserializaAsQuatroRespostasEmTiposConcretos() {
         RestClient.Builder brapiBuilder = RestClient.builder();
         MockRestServiceServer brapiServer = MockRestServiceServer.bindTo(brapiBuilder).build();

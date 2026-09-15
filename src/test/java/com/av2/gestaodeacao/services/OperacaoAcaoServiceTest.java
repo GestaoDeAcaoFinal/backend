@@ -1,5 +1,6 @@
 package com.av2.gestaodeacao.services;
 
+import com.av2.gestaodeacao.cliente.TwelveDataCliente;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.OperacaoAcao;
 import com.av2.gestaodeacao.domains.dtos.ResumoCarteiraDTO;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,15 +31,18 @@ class OperacaoAcaoServiceTest {
 
     private AcaoRepository acaoRepository;
     private OperacaoAcaoRepository operacaoRepository;
+    private TwelveDataCliente twelveDataCliente;
     private OperacaoAcaoService service;
 
     @BeforeEach
     void configurar() {
         acaoRepository = mock(AcaoRepository.class);
         operacaoRepository = mock(OperacaoAcaoRepository.class);
+        twelveDataCliente = mock(TwelveDataCliente.class);
         service = new OperacaoAcaoService();
         ReflectionTestUtils.setField(service, "repository", acaoRepository);
         ReflectionTestUtils.setField(service, "operacaoRepository", operacaoRepository);
+        ReflectionTestUtils.setField(service, "twelveDataCliente", twelveDataCliente);
         when(operacaoRepository.save(any(OperacaoAcao.class)))
                 .thenAnswer(invocacao -> invocacao.getArgument(0));
     }
@@ -59,6 +64,36 @@ class OperacaoAcaoServiceTest {
         assertThat(resultado.getPrecoMedio()).isEqualTo(25.50);
         assertThat(resultado.getDataOperacao()).isNotNull();
         verify(operacaoRepository).save(resultado);
+    }
+
+    @Test
+    void primeiraCompraUsaPrecoInformadoMesmoQuandoDiferenteDaCotacaoAtual() {
+        Acao acao = acao(1L, 35.0);
+        when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
+        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+                .thenReturn(List.of());
+
+        OperacaoAcao resultado = service.comprar(1L, 1, 30.0);
+
+        assertThat(resultado.getPrecoUnitario()).isEqualTo(30.0);
+        assertThat(resultado.getPrecoMedio()).isEqualTo(30.0);
+        assertThat(resultado.getValorTotal()).isEqualTo(30.0);
+    }
+
+    @Test
+    void comprasDaMesmaAcaoCalculamPrecoMedioPonderadoPeloPrecoInformado() {
+        Acao aapl = acao(1L, 22.0);
+        aapl.setTicker("AAPL");
+        OperacaoAcao compraA30 = operacao(aapl, TipoOperacao.COMPRA, 1, 30.0, 30.0);
+        when(acaoRepository.findById(1L)).thenReturn(Optional.of(aapl));
+        when(operacaoRepository.findByAcaoAndTipoOperacao(aapl, TipoOperacao.COMPRA))
+                .thenReturn(List.of(compraA30));
+        when(operacaoRepository.findByAcaoAndTipoOperacao(aapl, TipoOperacao.VENDA))
+                .thenReturn(List.of());
+
+        OperacaoAcao resultado = service.comprar(1L, 1, 20.0);
+
+        assertThat(resultado.getPrecoMedio()).isEqualTo(25.0);
     }
 
     @Test
@@ -269,6 +304,27 @@ class OperacaoAcaoServiceTest {
         assertThat(resultado.posicoes().get(0).precoMedio()).isEqualTo(25.0);
         assertThat(resultado.posicoes().get(0).custoTotal()).isEqualTo(75.0);
         assertThat(resultado.posicoes().get(0).valorAtual()).isEqualTo(120.0);
+    }
+
+    @Test
+    void converteValoresDeAcaoEmDolarParaReaisNoResumoDaCarteira() {
+        Acao aapl = acao(3L, 120.0);
+        aapl.setTicker("AAPL");
+        aapl.setMoeda("USD");
+        OperacaoAcao compra = operacao(aapl, TipoOperacao.COMPRA, 2, 100.0, 100.0);
+        when(operacaoRepository.findAll()).thenReturn(List.of(compra));
+        when(twelveDataCliente.buscarTaxaCambio("USD", "BRL"))
+                .thenReturn(new BigDecimal("5.25"));
+
+        ResumoCarteiraDTO resultado = service.resumirCarteira();
+
+        assertThat(resultado.precoMedioCarteira()).isEqualTo(525.0);
+        assertThat(resultado.custoTotalCarteira()).isEqualTo(1050.0);
+        assertThat(resultado.valorAtualCarteira()).isEqualTo(1260.0);
+        assertThat(resultado.posicoes().get(0).precoMedio()).isEqualTo(525.0);
+        assertThat(resultado.posicoes().get(0).custoTotal()).isEqualTo(1050.0);
+        assertThat(resultado.posicoes().get(0).cotacaoAtual()).isEqualTo(630.0);
+        assertThat(resultado.posicoes().get(0).valorAtual()).isEqualTo(1260.0);
     }
 
     @Test

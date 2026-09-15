@@ -33,12 +33,15 @@ public class OperacaoAcaoResource {
     @PostMapping("/comprar/{acaoId}")
     public OperacaoAcao comprar(
             @PathVariable @Positive(message = "Id da ação deve ser positivo") Long acaoId,
-            @RequestParam @Positive(message = "Quantidade deve ser positiva") Integer quantidade
+            @RequestParam @Positive(message = "Quantidade deve ser positiva") Integer quantidade,
+            @RequestParam(required = false)
+            @Positive(message = "Preço de compra deve ser positivo") Double precoCompra
     ) {
 
         return service.comprar(
                 acaoId,
-                quantidade
+                quantidade,
+                precoCompra
         );
     }
 

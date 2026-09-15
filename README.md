@@ -192,7 +192,7 @@ Exemplo de cadastro:
 | Método | Caminho | Descrição |
 | --- | --- | --- |
 | `GET` | `/operacoes` | Lista todas as operações |
-| `POST` | `/operacoes/comprar/{acaoId}?quantidade=10` | Registra uma compra |
+| `POST` | `/operacoes/comprar/{acaoId}?quantidade=10&precoCompra=42.50` | Registra uma compra; `precoCompra` é opcional e usa a cotação atual quando omitido |
 | `POST` | `/operacoes/vender/{acaoId}?quantidade=5&precoVenda=42.50` | Registra uma venda |
 | `GET` | `/operacoes/{acaoId}` | Lista o histórico de uma ação |
 | `GET` | `/operacoes/compras` | Lista compras |

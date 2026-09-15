@@ -131,6 +131,23 @@ class OperacaoAcaoResourceMvcTest {
                 .andExpect(jsonPath("$.status").value(409));
     }
 
+    @Test
+    void compraAceitaPrecoEditadoERepassaAoServico() throws Exception {
+        OperacaoAcao compra = operacao(3L, TipoOperacao.COMPRA);
+        compra.setPrecoUnitario(30.0);
+        compra.setPrecoMedio(30.0);
+        when(operacaoService.comprar(10L, 1, 30.0)).thenReturn(compra);
+
+        mockMvc.perform(post("/operacoes/comprar/10")
+                        .param("quantidade", "1")
+                        .param("precoCompra", "30.0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.precoUnitario").value(30.0))
+                .andExpect(jsonPath("$.precoMedio").value(30.0));
+
+        verify(operacaoService).comprar(10L, 1, 30.0);
+    }
+
     private OperacaoAcao operacao(Long id, TipoOperacao tipo) {
         Acao acao = new Acao();
         acao.setId(10L);
