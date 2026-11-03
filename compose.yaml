@@ -1,3 +1,4 @@
+
 name: gestao-de-acao
 
 x-app-base: &app-base
@@ -5,13 +6,26 @@ x-app-base: &app-base
     context: .
     dockerfile: Dockerfile
   image: gestao-de-acao:local
+
   environment: &app-environment
     DDL_AUTO: validate
     TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-test-key}
+
+    # Configuracoes JWT
+    JWT_SECRET: ${JWT_SECRET:?JWT_SECRET obrigatorio}
+    JWT_EXPIRATION: ${JWT_EXPIRATION:-60m}
+    JWT_ISSUER: ${JWT_ISSUER:-gestaodeacao}
+
+    # Administrador inicial
+    APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:?APP_ADMIN_USERNAME obrigatorio}
+    APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?APP_ADMIN_PASSWORD obrigatorio}
+
   ports:
     - "${APP_PORT:-8080}:8080"
 
 services:
+
+  # Backend conectado ao PostgreSQL do host
   app-host-postgresql:
     <<: *app-base
     profiles: ["host-postgresql"]
@@ -21,9 +35,10 @@ services:
       <<: *app-environment
       SPRING_PROFILES_ACTIVE: dev
       DB_URL: jdbc:postgresql://host.docker.internal:${HOST_POSTGRES_PORT:-5432}/${POSTGRES_DB:-gestaodeacao}
-      DB_USERNAME: ${DB_USERNAME}
-      DB_PASSWORD: ${DB_PASSWORD}
+      DB_USERNAME: ${DB_USERNAME:?DB_USERNAME obrigatorio}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD obrigatorio}
 
+  # Frontend Angular
   frontend:
     image: gestao-acao-front:local
     build:
@@ -35,6 +50,7 @@ services:
     depends_on:
       - app-host-postgresql
 
+  # Backend conectado ao PostgreSQL do Compose
   app-postgresql:
     <<: *app-base
     profiles: ["postgresql"]
@@ -48,6 +64,7 @@ services:
       postgres:
         condition: service_healthy
 
+  # Banco PostgreSQL
   postgres:
     image: postgres:17-alpine
     profiles: ["postgresql"]
@@ -66,6 +83,7 @@ services:
       retries: 12
       start_period: 10s
 
+  # Backend conectado ao MySQL
   app-mysql:
     <<: *app-base
     profiles: ["mysql"]
@@ -79,6 +97,7 @@ services:
       mysql:
         condition: service_healthy
 
+  # Banco MySQL
   mysql:
     image: mysql:8.4
     profiles: ["mysql"]
