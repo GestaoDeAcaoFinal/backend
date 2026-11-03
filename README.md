@@ -251,3 +251,25 @@ No PowerShell:
 ```
 
 Os testes automatizados usam H2, fixtures e servidores HTTP simulados; não exigem Docker, internet ou credenciais reais.
+
+## Segurança e autenticação JWT
+
+A API utiliza Spring Security com autenticação baseada em JSON Web Token (JWT). O endpoint `POST /api/auth/login` permite a autenticação mediante credenciais válidas e retorna um token com validade padrão de 60 minutos.
+
+Os endpoints de negócio exigem autenticação, e o token deve ser enviado no cabeçalho HTTP:
+
+`Authorization: Bearer <token>`
+
+As senhas dos usuários são armazenadas no banco de dados utilizando hash BCrypt. A assinatura dos tokens utiliza o algoritmo HS256, com chave secreta configurada por variável de ambiente.
+
+### Por que o JWT não deve conter dados sigilosos?
+
+O JSON Web Token (JWT) não deve armazenar informações sigilosas, como senhas, chaves de acesso ou dados pessoais sensíveis, porque seu conteúdo normalmente é codificado em Base64URL, e não criptografado. Dessa forma, qualquer pessoa que tenha acesso ao token pode decodificar e visualizar as informações presentes em seu payload. A assinatura digital garante a integridade e permite verificar a autenticidade do token, mas não assegura a confidencialidade das informações. Por esse motivo, a implementação utiliza apenas os dados necessários para identificação e autorização do usuário, como identificador, emissor, período de validade e permissões.
+
+### Diferença entre HTTP 401 e 403
+
+**401 Unauthorized:** indica que a requisição não apresentou credenciais de autenticação válidas. No sistema Gestão de Ações, esse retorno ocorre quando um usuário tenta acessar um recurso protegido sem informar um token JWT ou apresenta um token inválido, adulterado ou expirado.
+
+**403 Forbidden:** indica que o usuário está autenticado, mas não possui permissão suficiente para executar determinada operação. Por exemplo, considerando a regra de autorização configurada, um usuário com papel `USER` que tente executar uma operação `DELETE` reservada ao papel `ADMIN` receberá HTTP 403. Atualmente, o sistema ainda não possui endpoints de exclusão; essa regra está preparada para futuras funcionalidades.
+
+Essa distinção permite separar problemas de autenticação (401) de problemas de autorização (403).
