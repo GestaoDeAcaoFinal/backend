@@ -12,31 +12,33 @@
         </rollback>
     </changeSet>
 
-        <changeSet id="005-criar-tabela-usuario" author="gustavo">
-            <createTable tableName="usuario">
-                <column name="id" type="BIGINT">
-                    <constraints primaryKey="true" nullable="false"/>
-                </column>
-                <column name="username" type="VARCHAR(100)">
-                    <constraints nullable="false"/>
-                </column>
-                <column name="senha" type="VARCHAR(100)">
-                    <constraints nullable="false"/>
-                </column>
-                <column name="papel" type="VARCHAR(20)">
-                    <constraints nullable="false"/>
-                </column>
-                <column name="ativo" type="BOOLEAN" defaultValueBoolean="true">
-                    <constraints nullable="false"/>
-                </column>
-            </createTable>
+    <changeSet id="005-criar-tabela-usuario" author="gustavo">
+        <createTable tableName="usuario">
+            <column name="id" type="BIGINT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="username" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="senha" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="papel" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ativo" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
 
-            <addUniqueConstraint
-                    tableName="usuario"
-                    columnNames="username"
-                    constraintName="uk_usuario_username"/>
+        <addUniqueConstraint
+                tableName="usuario"
+                columnNames="username"
+                constraintName="uk_usuario_username"/>
 
-            <rollback>
-                <dropTable tableName="usuario"/>
-            </rollback>
-        </changeSet>
+        <rollback>
+            <dropTable tableName="usuario"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
