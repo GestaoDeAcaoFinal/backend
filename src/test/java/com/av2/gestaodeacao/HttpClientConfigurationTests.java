@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.env.Environment;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "spring.http.clients.imperative.factory=simple"
         }
 )
+@ActiveProfiles("test")
 class HttpClientConfigurationTests {
 
     @Autowired

@@ -1,3 +1,4 @@
+
 package com.av2.gestaodeacao.resources;
 
 import com.av2.gestaodeacao.exceptions.ConflitoException;
@@ -9,6 +10,7 @@ import com.av2.gestaodeacao.exceptions.RecursoNaoEncontradoException;
 import com.av2.gestaodeacao.services.AcaoService;
 import com.av2.gestaodeacao.services.CorretoraService;
 import com.av2.gestaodeacao.services.OperacaoAcaoService;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -17,6 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -27,6 +31,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -35,6 +41,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "TWELVE_DATA_API_KEY=test-key")
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
+@WithMockUser(username = "professor", roles = "ADMIN")
 class ApiContractMvcTest {
 
     @MockitoBean
@@ -51,7 +59,9 @@ class ApiContractMvcTest {
 
     @Test
     void payloadDeAcaoInvalidoRetornaProblemDetailSemInvocarServico() throws Exception {
+
         mockMvc.perform(post("/acoes")
+                        .with(user("professor").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ticker\":\" \",\"corretoraId\":0}"))
                 .andExpect(status().isBadRequest())
@@ -66,7 +76,9 @@ class ApiContractMvcTest {
 
     @Test
     void payloadDeCorretoraInvalidoRetornaErrosDosCamposSemInvocarServico() throws Exception {
+
         mockMvc.perform(post("/corretoras")
+                        .with(user("professor").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"cnpj\":\"123\",\"cep\":\"12A\"}"))
                 .andExpect(status().isBadRequest())
@@ -79,11 +91,18 @@ class ApiContractMvcTest {
 
     @Test
     void parametrosNaoPositivosSaoRejeitadosAntesDoServico() throws Exception {
-        mockMvc.perform(put("/acoes/0/atualizar-cotacao"))
+
+        mockMvc.perform(put("/acoes/0/atualizar-cotacao")
+                        .with(user("professor").roles("ADMIN")))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(post("/operacoes/comprar/1").param("quantidade", "0"))
+
+        mockMvc.perform(post("/operacoes/comprar/1")
+                        .with(user("professor").roles("ADMIN"))
+                        .param("quantidade", "0"))
                 .andExpect(status().isBadRequest());
+
         mockMvc.perform(post("/operacoes/vender/1")
+                        .with(user("professor").roles("ADMIN"))
                         .param("quantidade", "1")
                         .param("precoVenda", "0"))
                 .andExpect(status().isBadRequest());
@@ -93,14 +112,17 @@ class ApiContractMvcTest {
 
     @Test
     void requisicoesMalformadasMantemProblemDetailEstavel() throws Exception {
+
         mockMvc.perform(post("/acoes")
+                        .with(user("professor").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Requisição inválida"));
 
-        mockMvc.perform(post("/operacoes/comprar/1"))
+        mockMvc.perform(post("/operacoes/comprar/1")
+                        .with(user("professor").roles("ADMIN")))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value("Requisição inválida"));
@@ -115,11 +137,13 @@ class ApiContractMvcTest {
             int statusEsperado,
             String tituloEsperado
     ) throws Exception {
+
         reset(acaoService);
         when(acaoService.buscarPorId(anyLong())).thenThrow(exception);
 
         String corpo = mockMvc.perform(
-                        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/acoes/1"))
+                        get("/acoes/1")
+                                .with(user("professor").roles("ADMIN")))
                 .andExpect(status().is(statusEsperado))
                 .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(statusEsperado))
@@ -135,23 +159,38 @@ class ApiContractMvcTest {
     }
 
     private static Stream<Arguments> errosDeDominio() {
+
         RuntimeException causaSensivel = new RuntimeException(
                 "chave-super-secreta senha=segredo "
                         + "https://provedor.exemplo/quote?apikey=chave-super-secreta "
-                        + "payload-externo-confidencial");
+                        + "payload-externo-confidencial"
+        );
+
         return Stream.of(
-                Arguments.of(new EntradaOuOperacaoInvalidaException("Quantidade deve ser positiva"),
-                        400, "Requisição inválida"),
-                Arguments.of(new RecursoNaoEncontradoException("Ação não encontrada"),
-                        404, "Recurso não encontrado"),
-                Arguments.of(new ConflitoException("Ticker já cadastrado"),
-                        409, "Conflito"),
-                Arguments.of(new DadoExternoNaoEncontradoException("Ticker não encontrado"),
-                        422, "Dado externo não encontrado"),
-                Arguments.of(new FalhaDeProvedorException("Twelve Data", causaSensivel),
-                        502, "Falha no provedor"),
-                Arguments.of(new ProvedorIndisponivelException("Twelve Data", causaSensivel),
-                        503, "Provedor indisponível")
+                Arguments.of(
+                        new EntradaOuOperacaoInvalidaException("Quantidade deve ser positiva"),
+                        400, "Requisição inválida"
+                ),
+                Arguments.of(
+                        new RecursoNaoEncontradoException("Ação não encontrada"),
+                        404, "Recurso não encontrado"
+                ),
+                Arguments.of(
+                        new ConflitoException("Ticker já cadastrado"),
+                        409, "Conflito"
+                ),
+                Arguments.of(
+                        new DadoExternoNaoEncontradoException("Ticker não encontrado"),
+                        422, "Dado externo não encontrado"
+                ),
+                Arguments.of(
+                        new FalhaDeProvedorException("Twelve Data", causaSensivel),
+                        502, "Falha no provedor"
+                ),
+                Arguments.of(
+                        new ProvedorIndisponivelException("Twelve Data", causaSensivel),
+                        503, "Provedor indisponível"
+                )
         );
     }
 }
