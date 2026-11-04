@@ -127,11 +127,18 @@ class AuthResourceIntegrationTest {
     }
 
     @Test
-    void usuarioSemPapelAdminNaoPodeExcluir() throws Exception {
+    void usuarioSemPapelAdminNaoPodeCadastrarAcao() throws Exception {
         String tokenUser = gerarTokenComPapelUser();
 
-        mockMvc.perform(delete("/acoes/1")
-                        .header("Authorization", "Bearer " + tokenUser))
+        mockMvc.perform(post("/acoes")
+                        .header("Authorization", "Bearer " + tokenUser)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "ticker": "PETR4",
+                              "corretoraId": 1
+                            }
+                            """))
                 .andExpect(status().isForbidden());
     }
 
