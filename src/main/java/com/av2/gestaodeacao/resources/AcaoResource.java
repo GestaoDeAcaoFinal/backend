@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Positive;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -22,6 +23,7 @@ public class AcaoResource {
     private AcaoService service;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Acao salvar(@Valid @RequestBody AcaoRequestDTO dto) {
         return service.salvar(dto);
     }
@@ -48,6 +50,7 @@ public class AcaoResource {
     }
 
     @PutMapping("/{id}/atualizar-cotacao")
+    @PreAuthorize("hasRole('ADMIN')")
     public Acao atualizarCotacao(@PathVariable @Positive(message = "Id deve ser positivo") Long id) {
         return service.atualizarCotacao(id);
     }

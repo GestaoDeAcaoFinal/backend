@@ -7,9 +7,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @CrossOrigin(origins = "http://localhost:4200")
@@ -22,6 +22,7 @@ public class CorretoraResource {
     private CorretoraService service;
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public Corretora salvar(@Valid @RequestBody CorretoraRequestDTO dto) {
         return service.salvar(dto);
     }
