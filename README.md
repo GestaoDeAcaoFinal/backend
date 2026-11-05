@@ -273,3 +273,15 @@ O JSON Web Token (JWT) não deve armazenar informações sigilosas, como senhas,
 **403 Forbidden:** indica que o usuário está autenticado, mas não possui permissão suficiente para executar determinada operação. Por exemplo, considerando a regra de autorização configurada, um usuário com papel `USER` que tente executar uma operação `DELETE` reservada ao papel `ADMIN` receberá HTTP 403. Atualmente, o sistema ainda não possui endpoints de exclusão; essa regra está preparada para futuras funcionalidades.
 
 Essa distinção permite separar problemas de autenticação (401) de problemas de autorização (403).
+
+## Segurança e controle de acesso
+
+O sistema utiliza Spring Security com autenticação JWT
+e controle de acesso baseado em papéis (RBAC).
+
+Papéis disponíveis:
+- ADMIN: gerenciamento de usuários, ações e corretoras.
+- USER: consulta de ativos e realização de operações financeiras.
+
+A documentação detalhada das permissões e decisões de
+segurança está disponível em [Segurança RBAC](docs/seguranca-rbac.md).
