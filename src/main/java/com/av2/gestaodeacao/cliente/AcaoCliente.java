@@ -18,9 +18,14 @@ public class AcaoCliente {
     public AcaoCliente(
             RestClient.Builder builder,
             ProvedorHttpExecutor executor,
-            @Value("${integracoes.brapi.base-url}") String baseUrl
+            @Value("${integracoes.brapi.base-url}") String baseUrl,
+            @Value("${integracoes.brapi.token}") String token
     ) {
-        this.restClient = builder.baseUrl(baseUrl).build();
+        this.restClient = builder
+                .baseUrl(baseUrl)
+                .defaultHeader("Authorization", "Bearer " + token)
+                .build();
+
         this.executor = executor;
     }
 
@@ -35,12 +40,16 @@ public class AcaoCliente {
         if (response == null || response.results() == null || response.results().isEmpty()) {
             throw new DadoExternoNaoEncontradoException("Ticker não encontrado na Brapi");
         }
+
         BrapiQuoteResponse quote = response.results().get(0);
-        if (quote == null || vazio(quote.longName()) || quote.regularMarketPrice() == null ||
+
+        if (quote == null || vazio(quote.longName()) ||
+                quote.regularMarketPrice() == null ||
                 quote.regularMarketPrice().signum() <= 0 ||
                 vazio(quote.currency())) {
             throw new FalhaDeProvedorException("Brapi");
         }
+
         return response;
     }
 
