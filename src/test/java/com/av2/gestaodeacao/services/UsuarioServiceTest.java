@@ -1,6 +1,7 @@
 
 package com.av2.gestaodeacao.services;
 
+import com.av2.gestaodeacao.domains.dtos.AlterarSenhaRequest;
 import com.av2.gestaodeacao.domains.Usuario;
 import com.av2.gestaodeacao.domains.dtos.UsuarioCreateRequest;
 import com.av2.gestaodeacao.domains.dtos.UsuarioUpdateRequest;
@@ -110,6 +111,47 @@ class UsuarioServiceTest {
         // Assert
         assertThat(response.username()).isEqualTo("ana");
         assertThat(response.ativo()).isTrue();
+    }
+
+    @Test
+    void deveRetornarNotFoundAoConsultarIdInexistente() {
+        // Arrange
+        when(usuarioRepository.findById(999L))
+                .thenReturn(Optional.empty());
+
+        // Act + Assert
+        assertThatThrownBy(() -> usuarioService.findById(999L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex)
+                        .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verify(usuarioRepository).findById(999L);
+    }
+
+    @Test
+    void deveAlterarSenhaArmazenandoHashEmVezDeTextoPuro() {
+        // Arrange
+        Usuario usuario = criarUsuario(1L, "ana");
+
+        AlterarSenhaRequest request =
+                new AlterarSenhaRequest("nova-senha-segura");
+
+        when(usuarioRepository.findById(1L))
+                .thenReturn(Optional.of(usuario));
+
+        when(passwordEncoder.encode("nova-senha-segura"))
+                .thenReturn("novo-hash-bcrypt");
+
+        // Act
+        usuarioService.alterarSenha(1L, request);
+
+        // Assert
+        assertThat(usuario.getSenha())
+                .isEqualTo("novo-hash-bcrypt")
+                .isNotEqualTo(request.password());
+
+        verify(passwordEncoder).encode("nova-senha-segura");
+        verify(usuarioRepository).save(usuario);
     }
 
     @Test
