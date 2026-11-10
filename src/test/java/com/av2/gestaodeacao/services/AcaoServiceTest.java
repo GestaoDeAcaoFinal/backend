@@ -189,6 +189,82 @@ class AcaoServiceTest {
         verify(repository).findByTicker("PETR4");
     }
 
+
+    @Test
+    void deveAtualizarCotacaoAmericanaUsandoSomenteTwelveData() {
+        // Arrange
+        LocalDateTime anterior = LocalDateTime.of(2026, 1, 1, 10, 0);
+
+        Acao acao = acaoExistente("AAPL", "EUA", 200.0, anterior);
+
+        when(repository.findById(1L))
+                .thenReturn(Optional.of(acao));
+
+        when(twelveData.buscarAcao("AAPL"))
+                .thenReturn(twelve("Apple Inc", "225.50", "USD"));
+
+        when(repository.save(acao))
+                .thenReturn(acao);
+
+        // Act
+        Acao atualizada = service.atualizarCotacao(1L);
+
+        // Assert
+        assertThat(atualizada.getCotacaoAtual())
+                .isEqualTo(225.50);
+
+        assertThat(atualizada.getDataHoraCotacao())
+                .isAfter(anterior);
+
+        verify(twelveData).buscarAcao("AAPL");
+        verifyNoInteractions(brapi);
+        verify(repository).save(acao);
+    }
+
+
+    @Test
+    void deveRecusarCadastroQuandoMoedaEstiverAusente() {
+        // Arrange
+        prepararCadastro("PETR4");
+
+        when(brapi.buscarAcao("PETR4"))
+                .thenReturn(brapi("Petrobras", "31.42", null));
+
+        // Act + Assert
+        assertThatThrownBy(() -> service.salvar(novaAcao("PETR4")))
+                .isInstanceOf(FalhaDeProvedorException.class);
+
+        verify(brapi).buscarAcao("PETR4");
+        verify(repository, never()).save(any(Acao.class));
+        verifyNoInteractions(twelveData);
+    }
+
+
+    @Test
+    void deveRecusarCadastroQuandoCotacaoForNula() {
+        // Arrange
+        prepararCadastro("PETR4");
+
+        when(brapi.buscarAcao("PETR4"))
+                .thenReturn(new BrapiResponse(
+                        List.of(new BrapiQuoteResponse(
+                                "Petrobras",
+                                null,
+                                "BRL"
+                        ))
+                ));
+
+        // Act + Assert
+        assertThatThrownBy(() -> service.salvar(novaAcao("PETR4")))
+                .isInstanceOf(FalhaDeProvedorException.class);
+
+        verify(brapi).buscarAcao("PETR4");
+        verify(repository, never()).save(any(Acao.class));
+        verifyNoInteractions(twelveData);
+    }
+
+
+
     private void verificarFalhaAtomica(RuntimeException falha) {
         reset(brapi);
         LocalDateTime anterior = LocalDateTime.of(2026, 1, 1, 10, 0);
