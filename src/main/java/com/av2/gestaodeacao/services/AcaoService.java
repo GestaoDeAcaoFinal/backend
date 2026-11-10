@@ -1,3 +1,4 @@
+
 package com.av2.gestaodeacao.services;
 
 import com.av2.gestaodeacao.cliente.AcaoCliente;
@@ -8,6 +9,7 @@ import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.Corretora;
 import com.av2.gestaodeacao.domains.dtos.AcaoRequestDTO;
 import com.av2.gestaodeacao.exceptions.ConflitoException;
+import com.av2.gestaodeacao.exceptions.EntradaOuOperacaoInvalidaException;
 import com.av2.gestaodeacao.exceptions.FalhaDeProvedorException;
 import com.av2.gestaodeacao.exceptions.RecursoNaoEncontradoException;
 import com.av2.gestaodeacao.repositories.AcaoRepository;
@@ -31,12 +33,37 @@ public class AcaoService {
     @Autowired private MercadoTickerClassifier mercadoTickerClassifier;
 
     public Acao salvar(AcaoRequestDTO dto) {
+
+        // Valida se os dados do cadastro foram informados
+        if (dto == null) {
+            throw new EntradaOuOperacaoInvalidaException(
+                    "Dados da ação são obrigatórios"
+            );
+        }
+
         String ticker = TickerNormalizer.normalizar(dto.getTicker());
+
+        // Valida se a corretora foi informada
+        if (dto.getCorretoraId() == null) {
+            throw new EntradaOuOperacaoInvalidaException(
+                    "Corretora é obrigatória"
+            );
+        }
+
+        // Valida se o identificador da corretora é positivo
+        if (dto.getCorretoraId() <= 0) {
+            throw new EntradaOuOperacaoInvalidaException(
+                    "Corretora deve possuir identificador positivo"
+            );
+        }
+
         if (repository.findByTicker(ticker).isPresent()) {
             throw new ConflitoException("Ticker já cadastrado");
         }
+
         Corretora corretora = corretoraRepository.findById(dto.getCorretoraId())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Corretora não encontrada"));
+
         DadosMercado dados = buscarDadosMercado(ticker);
         validarDadosCompletos(dados);
 
@@ -48,6 +75,7 @@ public class AcaoService {
         acao.setMoeda(dados.moeda());
         acao.setMercado(dados.mercado());
         acao.setDataHoraCotacao(LocalDateTime.now());
+
         try {
             Acao acaoSalva = repository.save(acao);
             repository.flush();
@@ -81,31 +109,52 @@ public class AcaoService {
 
         acao.setCotacaoAtual(novaCotacao.doubleValue());
         acao.setDataHoraCotacao(novoInstante);
+
         return repository.save(acao);
     }
 
     private DadosMercado buscarDadosMercado(String ticker) {
         String mercado = mercadoTickerClassifier.classificar(ticker);
+
         if ("EUA".equals(mercado)) {
             TwelveDataResponse response = twelveDataCliente.buscarAcao(ticker);
-            return new DadosMercado(response.name(), response.close(), response.currency(), mercado, "Twelve Data");
+
+            return new DadosMercado(
+                    response.name(),
+                    response.close(),
+                    response.currency(),
+                    mercado,
+                    "Twelve Data"
+            );
         }
+
         BrapiQuoteResponse response = cliente.buscarAcao(ticker).results().get(0);
+
         return new DadosMercado(
-                response.longName(), response.regularMarketPrice(), response.currency(), mercado, "Brapi");
+                response.longName(),
+                response.regularMarketPrice(),
+                response.currency(),
+                mercado,
+                "Brapi"
+        );
     }
 
     private BigDecimal buscarCotacao(Acao acao) {
         if ("EUA".equals(acao.getMercado())) {
             return twelveDataCliente.buscarAcao(acao.getTicker()).close();
         }
-        return cliente.buscarAcao(acao.getTicker()).results().get(0).regularMarketPrice();
+
+        return cliente.buscarAcao(acao.getTicker())
+                .results()
+                .get(0)
+                .regularMarketPrice();
     }
 
     private void validarDadosCompletos(DadosMercado dados) {
         if (vazio(dados.nomeEmpresa()) || vazio(dados.moeda())) {
             throw new FalhaDeProvedorException(dados.provedor());
         }
+
         validarCotacaoPositiva(dados.cotacao(), dados.provedor());
     }
 

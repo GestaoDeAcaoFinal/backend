@@ -9,6 +9,7 @@ import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.Corretora;
 import com.av2.gestaodeacao.domains.dtos.AcaoRequestDTO;
 import com.av2.gestaodeacao.exceptions.ConflitoException;
+import com.av2.gestaodeacao.exceptions.EntradaOuOperacaoInvalidaException;
 import com.av2.gestaodeacao.exceptions.DadoExternoNaoEncontradoException;
 import com.av2.gestaodeacao.exceptions.FalhaDeProvedorException;
 import com.av2.gestaodeacao.exceptions.ProvedorIndisponivelException;
@@ -264,6 +265,51 @@ class AcaoServiceTest {
     }
 
 
+    @Test
+    void deveRecusarCadastroComCorretoraIdNulo() {
+        // Arrange
+        AcaoRequestDTO dto = novaAcao("PETR4");
+        dto.setCorretoraId(null);
+
+        // Act + Assert
+        assertThatThrownBy(() -> service.salvar(dto))
+                .isInstanceOf(
+                        com.av2.gestaodeacao.exceptions.EntradaOuOperacaoInvalidaException.class
+                );
+
+        verifyNoInteractions(corretoraRepository, brapi, twelveData);
+        verify(repository, never()).save(any(Acao.class));
+    }
+
+    @Test
+    void deveRecusarCadastroComCorretoraIdZero() {
+        // Arrange
+        AcaoRequestDTO dto = novaAcao("PETR4");
+        dto.setCorretoraId(0L);
+
+        // Act + Assert
+        assertThatThrownBy(() -> service.salvar(dto))
+                .isInstanceOf(EntradaOuOperacaoInvalidaException.class);
+
+        verifyNoInteractions(corretoraRepository, brapi, twelveData);
+        verify(repository, never()).save(any(Acao.class));
+    }
+
+
+    @Test
+    void deveRecusarCadastroComDtoNulo() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.salvar(null))
+                .isInstanceOf(EntradaOuOperacaoInvalidaException.class)
+                .hasMessage("Dados da ação são obrigatórios");
+
+        verifyNoInteractions(
+                repository,
+                corretoraRepository,
+                brapi,
+                twelveData
+        );
+    }
 
     private void verificarFalhaAtomica(RuntimeException falha) {
         reset(brapi);
