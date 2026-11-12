@@ -10,6 +10,9 @@ import com.av2.gestaodeacao.exceptions.DadoExternoNaoEncontradoException;
 import com.av2.gestaodeacao.exceptions.FalhaDeProvedorException;
 import com.av2.gestaodeacao.exceptions.ProvedorIndisponivelException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -25,12 +28,31 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class ClientesExternosTest {
 
     private static final String BRAPI_TEST_TOKEN = "test-token";
 
     private final ProvedorHttpExecutor executor = new ProvedorHttpExecutor();
+
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403})
+    void identificaRecusaDeAutenticacaoDoProvedorSemExporAResposta(int status) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AcaoCliente cliente = new AcaoCliente(builder, executor, "https://brapi.test", BRAPI_TEST_TOKEN);
+        server.expect(requestTo("https://brapi.test/api/quote/BBAS3"))
+                .andRespond(withStatus(HttpStatus.valueOf(status))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"rejeitado: test-secret\"}"));
+        assertThatThrownBy(() -> cliente.buscarAcao("BBAS3"))
+                .isInstanceOf(FalhaDeProvedorException.class)
+                .hasMessageContaining("Brapi")
+                .hasMessageContaining("autenticação")
+                .hasMessageNotContaining("test-secret");
+        server.verify();
+    }
 
     @Test
     void buscaTaxaDeCambioEntreAMoedaDaAcaoEOReal() {
