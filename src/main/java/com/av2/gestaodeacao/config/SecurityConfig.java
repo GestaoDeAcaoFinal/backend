@@ -1,6 +1,8 @@
 package com.av2.gestaodeacao.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import com.av2.gestaodeacao.repositories.UsuarioRepository;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,10 +18,14 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Configuration
 @EnableMethodSecurity
@@ -33,6 +39,7 @@ public class SecurityConfig {
     ) throws Exception {
 
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -44,6 +51,19 @@ public class SecurityConfig {
                                 .jwtAuthenticationConverter(jwtAuthenticationConverter)));
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://127.0.0.1:4200"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setExposedHeaders(List.of("Location"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 
     // 8.4 - Criptografia de senhas
@@ -93,7 +113,7 @@ public class SecurityConfig {
 
     // 9 - Conversão das permissões do JWT
     @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+    public JwtAuthenticationConverter jwtAuthenticationConverter(UsuarioRepository usuarios) {
 
         JwtGrantedAuthoritiesConverter authoritiesConverter =
                 new JwtGrantedAuthoritiesConverter();
@@ -104,7 +124,24 @@ public class SecurityConfig {
         JwtAuthenticationConverter jwtConverter =
                 new JwtAuthenticationConverter();
 
-        jwtConverter.setJwtGrantedAuthoritiesConverter(authoritiesConverter);
+        jwtConverter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            var usuario = usuarios.findByUsername(jwt.getSubject())
+                    .filter(u -> Boolean.TRUE.equals(u.getAtivo()))
+                    .orElseThrow(() -> new InvalidBearerTokenException("Sessão inválida"));
+            if (!usuario.getId().toString().equals(jwt.getClaimAsString("uid"))
+                    || !usuario.getVersaoSessao().toString().equals(jwt.getClaimAsString("sv"))) {
+                throw new InvalidBearerTokenException("Sessão inválida. Entre novamente");
+            }
+            var authorities = authoritiesConverter.convert(jwt).stream()
+                    .filter(authority -> authority.getAuthority().startsWith("ROLE_"))
+                    .toList();
+            String papelAtual = "ROLE_" + usuario.getPapel().name();
+            if (authorities.size() != 1 || authorities.stream()
+                    .noneMatch(authority -> papelAtual.equals(authority.getAuthority()))) {
+                throw new InvalidBearerTokenException("Permissões alteradas. Entre novamente");
+            }
+            return authorities;
+        });
 
         return jwtConverter;
     }

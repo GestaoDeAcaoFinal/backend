@@ -25,7 +25,7 @@ public class ProvedorHttpExecutor {
                 throw new DadoExternoNaoEncontradoException(
                         "Dado não encontrado no provedor " + provedor);
             }
-            throw new FalhaDeProvedorException(provedor, e);
+            throw new FalhaDeProvedorException(provedor, e.getStatusCode().value(), e);
         } catch (RuntimeException e) {
             throw new FalhaDeProvedorException(provedor, e);
         }

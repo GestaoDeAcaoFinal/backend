@@ -26,7 +26,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,6 +46,16 @@ class AuthResourceIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Test
+    void preflightDoLoginPermiteFrontendAngular() throws Exception {
+        mockMvc.perform(options("/api/auth/login")
+                        .header("Origin", "http://localhost:4200")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type,authorization"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
+    }
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -72,6 +85,7 @@ class AuthResourceIntegrationTest {
     }
     @AfterEach
     void removerUsuario() {
+        jdbcTemplate.update("DELETE FROM operacao_acao WHERE usuario_id = 999999");
         jdbcTemplate.update(
                 "DELETE FROM usuario WHERE username = ?",
                 USUARIO
@@ -84,6 +98,79 @@ class AuthResourceIntegrationTest {
 
         assertThat(token).isNotBlank();
         assertThat(token.split("\\.")).hasSize(3);
+    }
+
+    @Test
+    void tokenAdminPerdeAcessoDepoisDeRebaixamento() throws Exception {
+        String token = realizarLogin(USUARIO, SENHA);
+        jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username = ?", USUARIO);
+        mockMvc.perform(get("/api/usuarios").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tokenDeUsuarioDesativadoNaoAcessaRecursos() throws Exception {
+        String token = realizarLogin(USUARIO, SENHA);
+        jdbcTemplate.update("UPDATE usuario SET ativo = false WHERE username = ?", USUARIO);
+        mockMvc.perform(get("/acoes").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void trocaDeSenhaInvalidaTokenAnteriorEMantemNovoLogin() throws Exception {
+        String token = realizarLogin(USUARIO, SENHA);
+        mockMvc.perform(put("/api/usuarios/999999/senha")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"NovaSenhaSomenteTeste123!\"}"))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/acoes").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+        String novoToken = realizarLogin(USUARIO, "NovaSenhaSomenteTeste123!");
+        mockMvc.perform(get("/acoes").header("Authorization", "Bearer " + novoToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void tokenAntigoNaoPodeAssumirOutraContaComMesmoUsername() throws Exception {
+        String token = realizarLogin(USUARIO, SENHA);
+        jdbcTemplate.update("UPDATE usuario SET username = 'admin_renomeado' WHERE id = 999999");
+        jdbcTemplate.update("INSERT INTO usuario (id, username, senha, papel, ativo) VALUES (999997, ?, ?, 'ADMIN', true)", USUARIO, passwordEncoder.encode(SENHA));
+        mockMvc.perform(get("/acoes").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void naoPermiteRebaixarUltimoAdminAtivo() throws Exception {
+        jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username <> ?", USUARIO);
+        String token = realizarLogin(USUARIO, SENHA);
+        mockMvc.perform(put("/api/usuarios/999999")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"username":"integracao_jwt_admin","papel":"USER","ativo":true}
+                            """))
+                .andExpect(status().isConflict());
+        assertThat(jdbcTemplate.queryForObject("SELECT papel FROM usuario WHERE id = 999999", String.class))
+                .isEqualTo("ADMIN");
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void naoPermiteDesativarUltimoAdminAtivo() throws Exception {
+        jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username <> ?", USUARIO);
+        String token = realizarLogin(USUARIO, SENHA);
+        mockMvc.perform(put("/api/usuarios/999999")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {"username":"integracao_jwt_admin","papel":"ADMIN","ativo":false}
+                            """))
+                .andExpect(status().isConflict());
+        assertThat(jdbcTemplate.queryForObject("SELECT ativo FROM usuario WHERE id = 999999", Boolean.class))
+                .isTrue();
     }
 
     @Test
@@ -107,6 +194,38 @@ class AuthResourceIntegrationTest {
         mockMvc.perform(get("/acoes")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void carteiraHistoricoEVendaSaoExclusivosDoDono() throws Exception {
+        jdbcTemplate.update("INSERT INTO usuario (id, username, senha, papel, ativo) VALUES (999998, 'outro_investidor', ?, 'USER', true)", passwordEncoder.encode(SENHA));
+        jdbcTemplate.update("INSERT INTO acoes (id, ticker, cotacao_atual, moeda) VALUES (999998, 'ISOL3', 10, 'BRL')");
+        String tokenAdmin = realizarLogin(USUARIO, SENHA);
+        String compra = mockMvc.perform(post("/operacoes/comprar/999998")
+                        .param("quantidade", "10").param("precoCompra", "10")
+                        .header("Authorization", "Bearer " + tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usuario").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        long idCompra = jsonMapper.readTree(compra).get("id").asLong();
+        String tokenOutro = realizarLogin("outro_investidor", SENHA);
+        mockMvc.perform(get("/operacoes/carteira").header("Authorization", "Bearer " + tokenOutro))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.posicoes").isEmpty());
+        for (String caminho : List.of("/operacoes", "/operacoes/999998", "/operacoes/compras", "/operacoes/vendas")) {
+            mockMvc.perform(get(caminho).header("Authorization", "Bearer " + tokenOutro))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        }
+        mockMvc.perform(get("/operacoes/buscar/" + idCompra).header("Authorization", "Bearer " + tokenOutro))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/operacoes/vender/999998").param("quantidade", "1").param("precoVenda", "12")
+                        .header("Authorization", "Bearer " + tokenOutro))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/operacoes/comprar/999998").param("quantidade", "2").param("precoCompra", "20")
+                        .header("Authorization", "Bearer " + tokenOutro))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.precoMedio").value(20));
+        mockMvc.perform(get("/operacoes/carteira").header("Authorization", "Bearer " + tokenAdmin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.quantidadeTotal").value(10));
     }
 
     @Test
@@ -161,13 +280,16 @@ class AuthResourceIntegrationTest {
     }
 
     private String gerarTokenComPapelUser() {
+        jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username = ?", USUARIO);
         Instant agora = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(jwtProperties.issuer())
                 .issuedAt(agora)
                 .expiresAt(agora.plusSeconds(3600))
-                .subject("usuario_comum")
+                .subject(USUARIO)
+                .claim("uid", "999999")
+                .claim("sv", "0")
                 .claim("authorities", List.of("ROLE_USER"))
                 .build();
 

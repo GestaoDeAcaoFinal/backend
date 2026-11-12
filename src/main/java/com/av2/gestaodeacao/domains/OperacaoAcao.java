@@ -3,6 +3,7 @@ package com.av2.gestaodeacao.domains;
 import com.av2.gestaodeacao.domains.enums.TipoOperacao;
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -27,4 +28,9 @@ public class OperacaoAcao {
     @ManyToOne
     @JoinColumn(name = "acao_id")
     private Acao acao;
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
 }

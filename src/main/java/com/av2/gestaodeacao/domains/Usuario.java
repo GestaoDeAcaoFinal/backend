@@ -29,6 +29,13 @@ public class Usuario {
     @Column(nullable = false)
     private Boolean ativo;
 
+    @Column(nullable = false)
+    private Long versaoSessao = 0L;
+
+    public Long getVersaoSessao() { return versaoSessao; }
+
+    public void invalidarSessoes() { versaoSessao++; }
+
     public Long getId() {
         return id;
     }
