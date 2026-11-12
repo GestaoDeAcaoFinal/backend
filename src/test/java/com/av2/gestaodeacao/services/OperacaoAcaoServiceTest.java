@@ -12,6 +12,11 @@ import com.av2.gestaodeacao.repositories.AcaoRepository;
 import com.av2.gestaodeacao.repositories.OperacaoAcaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import com.av2.gestaodeacao.domains.Usuario;
+import com.av2.gestaodeacao.repositories.UsuarioRepository;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -43,15 +48,29 @@ class OperacaoAcaoServiceTest {
         ReflectionTestUtils.setField(service, "repository", acaoRepository);
         ReflectionTestUtils.setField(service, "operacaoRepository", operacaoRepository);
         ReflectionTestUtils.setField(service, "twelveDataCliente", twelveDataCliente);
+        UsuarioRepository usuarios = mock(UsuarioRepository.class);
+        Usuario usuario = new Usuario();
+        usuario.setId(1L);
+        usuario.setAtivo(true);
+        when(usuarios.findByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
+        when(usuarios.findForUpdateByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
+        ReflectionTestUtils.setField(service, "usuarioRepository", usuarios);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("investidor_teste", null, List.of()));
         when(operacaoRepository.save(any(OperacaoAcao.class)))
                 .thenAnswer(invocacao -> invocacao.getArgument(0));
+    }
+
+    @AfterEach
+    void limparAutenticacao() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
     void primeiraCompraRegistraCamposObrigatoriosEEstabelecePrecoMedio() {
         Acao acao = acao(1L, 25.50);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of());
 
         OperacaoAcao resultado = service.comprar(1L, 4);
@@ -70,7 +89,7 @@ class OperacaoAcaoServiceTest {
     void primeiraCompraUsaPrecoInformadoMesmoQuandoDiferenteDaCotacaoAtual() {
         Acao acao = acao(1L, 35.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of());
 
         OperacaoAcao resultado = service.comprar(1L, 1, 30.0);
@@ -86,9 +105,9 @@ class OperacaoAcaoServiceTest {
         aapl.setTicker("AAPL");
         OperacaoAcao compraA30 = operacao(aapl, TipoOperacao.COMPRA, 1, 30.0, 30.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(aapl));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(aapl, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(aapl, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(compraA30));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(aapl, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(aapl, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of());
 
         OperacaoAcao resultado = service.comprar(1L, 1, 20.0);
@@ -101,14 +120,14 @@ class OperacaoAcaoServiceTest {
         Acao acao = acao(1L, 130.0);
         OperacaoAcao compraAnterior = operacao(acao, TipoOperacao.COMPRA, 10, 100.0, 100.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(compraAnterior));
 
         OperacaoAcao resultado = service.comprar(1L, 20);
 
         assertThat(resultado.getPrecoMedio()).isEqualTo(120.0);
-        verify(operacaoRepository).findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA);
-        verify(operacaoRepository).findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA);
+        verify(operacaoRepository).findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L);
+        verify(operacaoRepository).findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L);
     }
 
     @Test
@@ -118,9 +137,9 @@ class OperacaoAcaoServiceTest {
         OperacaoAcao compraA30 = operacao(acao, TipoOperacao.COMPRA, 1, 30.0, 25.0);
         OperacaoAcao venda = operacao(acao, TipoOperacao.VENDA, 1, 35.0, 25.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(compraA20, compraA30));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of(venda));
 
         OperacaoAcao resultado = service.comprar(1L, 1);
@@ -163,9 +182,9 @@ class OperacaoAcaoServiceTest {
         OperacaoAcao primeira = operacao(acao, TipoOperacao.COMPRA, 2, 10.0, 10.0);
         OperacaoAcao segunda = operacao(acao, TipoOperacao.COMPRA, 2, 20.0, 15.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(segunda, primeira));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of());
 
         OperacaoAcao resultado = service.vender(1L, 1, 20.0);
@@ -181,7 +200,7 @@ class OperacaoAcaoServiceTest {
     void vendaSemCompraRetornaRegraInvalidaSemPersistir() {
         Acao acao = acao(1L, 10.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of());
 
         assertThatThrownBy(() -> service.vender(1L, 1, 12.0))
@@ -193,9 +212,9 @@ class OperacaoAcaoServiceTest {
     void vendaAcimaDoSaldoRetornaConflitoSemPersistir() {
         Acao acao = acao(1L, 10.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(operacao(acao, TipoOperacao.COMPRA, 5, 10.0, 10.0)));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of(operacao(acao, TipoOperacao.VENDA, 3, 12.0, 10.0)));
 
         assertThatThrownBy(() -> service.vender(1L, 3, 12.0))
@@ -207,9 +226,9 @@ class OperacaoAcaoServiceTest {
     void vendaValidaConsideraSaldoCompradoMenosVendido() {
         Acao acao = acao(1L, 10.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(operacao(acao, TipoOperacao.COMPRA, 5, 10.0, 10.0)));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of(operacao(acao, TipoOperacao.VENDA, 3, 12.0, 10.0)));
 
         OperacaoAcao resultado = service.vender(1L, 2, 11.0);
@@ -226,9 +245,9 @@ class OperacaoAcaoServiceTest {
         OperacaoAcao vendaAnterior = operacao(acao, TipoOperacao.VENDA, 1, 35.0, 25.0);
         OperacaoAcao recompra = operacao(acao, TipoOperacao.COMPRA, 1, 40.0, 32.5);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(compraA20, compraA30, recompra));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of(vendaAnterior));
 
         OperacaoAcao resultado = service.vender(1L, 1, 45.0);
@@ -261,12 +280,12 @@ class OperacaoAcaoServiceTest {
         OperacaoAcao compra = operacao(acao, TipoOperacao.COMPRA, 1, 10.0, 10.0);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
         when(acaoRepository.findById(99L)).thenReturn(Optional.empty());
-        when(operacaoRepository.findAll()).thenReturn(List.of(compra));
-        when(operacaoRepository.findByAcao(acao)).thenReturn(List.of(compra));
-        when(operacaoRepository.findByTipoOperacao(TipoOperacao.COMPRA)).thenReturn(List.of(compra));
-        when(operacaoRepository.findByTipoOperacao(TipoOperacao.VENDA)).thenReturn(List.of());
-        when(operacaoRepository.findById(7L)).thenReturn(Optional.of(compra));
-        when(operacaoRepository.findById(8L)).thenReturn(Optional.empty());
+        when(operacaoRepository.findByUsuarioId(1L)).thenReturn(List.of(compra));
+        when(operacaoRepository.findByAcaoAndUsuarioId(acao, 1L)).thenReturn(List.of(compra));
+        when(operacaoRepository.findByTipoOperacaoAndUsuarioId(TipoOperacao.COMPRA, 1L)).thenReturn(List.of(compra));
+        when(operacaoRepository.findByTipoOperacaoAndUsuarioId(TipoOperacao.VENDA, 1L)).thenReturn(List.of());
+        when(operacaoRepository.findByIdAndUsuarioId(7L, 1L)).thenReturn(Optional.of(compra));
+        when(operacaoRepository.findByIdAndUsuarioId(8L, 1L)).thenReturn(Optional.empty());
 
         assertThat(service.listar()).containsExactly(compra);
         assertThat(service.listarHistorico(1L)).containsExactly(compra);
@@ -288,7 +307,7 @@ class OperacaoAcaoServiceTest {
         OperacaoAcao petrCompraA30 = operacao(petr4, TipoOperacao.COMPRA, 2, 30.0, 25.0);
         OperacaoAcao petrVenda = operacao(petr4, TipoOperacao.VENDA, 1, 35.0, 25.0);
         OperacaoAcao valeCompra = operacao(vale3, TipoOperacao.COMPRA, 2, 50.0, 50.0);
-        when(operacaoRepository.findAll()).thenReturn(
+        when(operacaoRepository.findByUsuarioId(1L)).thenReturn(
                 List.of(petrCompraA20, petrCompraA30, petrVenda, valeCompra)
         );
 
@@ -312,7 +331,7 @@ class OperacaoAcaoServiceTest {
         aapl.setTicker("AAPL");
         aapl.setMoeda("USD");
         OperacaoAcao compra = operacao(aapl, TipoOperacao.COMPRA, 2, 100.0, 100.0);
-        when(operacaoRepository.findAll()).thenReturn(List.of(compra));
+        when(operacaoRepository.findByUsuarioId(1L)).thenReturn(List.of(compra));
         when(twelveDataCliente.buscarTaxaCambio("USD", "BRL"))
                 .thenReturn(new BigDecimal("5.25"));
 
@@ -332,7 +351,7 @@ class OperacaoAcaoServiceTest {
         Acao acao = acao(1L, 40.0);
         OperacaoAcao compra = operacao(acao, TipoOperacao.COMPRA, 2, 25.0, 25.0);
         OperacaoAcao venda = operacao(acao, TipoOperacao.VENDA, 2, 30.0, 25.0);
-        when(operacaoRepository.findAll()).thenReturn(List.of(compra, venda));
+        when(operacaoRepository.findByUsuarioId(1L)).thenReturn(List.of(compra, venda));
 
         ResumoCarteiraDTO resultado = service.resumirCarteira();
 
@@ -347,9 +366,9 @@ class OperacaoAcaoServiceTest {
         Acao acao = acao(1L, precoMedio);
         OperacaoAcao compra = operacao(acao, TipoOperacao.COMPRA, 10, precoMedio, precoMedio);
         when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
                 .thenReturn(List.of(compra));
-        when(operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA))
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
                 .thenReturn(List.of());
         return service.vender(1L, quantidade, precoVenda);
     }

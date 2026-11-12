@@ -3,6 +3,10 @@ package com.av2.gestaodeacao.services;
 import com.av2.gestaodeacao.cliente.TwelveDataCliente;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.OperacaoAcao;
+import com.av2.gestaodeacao.domains.Usuario;
+import com.av2.gestaodeacao.repositories.UsuarioRepository;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import com.av2.gestaodeacao.domains.dtos.PosicaoCarteiraDTO;
 import com.av2.gestaodeacao.domains.dtos.ResumoCarteiraDTO;
 import com.av2.gestaodeacao.domains.enums.TipoOperacao;
@@ -37,6 +41,25 @@ public class OperacaoAcaoService {
     @Autowired
     private TwelveDataCliente twelveDataCliente;
 
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    private Usuario usuarioAtual() {
+        return usuarioAtual(false);
+    }
+
+    private Usuario usuarioAtual(boolean bloquear) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AuthenticationCredentialsNotFoundException("Autenticação necessária");
+        }
+        var usuario = bloquear ? usuarioRepository.findForUpdateByUsername(authentication.getName())
+                : usuarioRepository.findByUsername(authentication.getName());
+        return usuario
+                .filter(u -> Boolean.TRUE.equals(u.getAtivo()))
+                .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("Usuário indisponível"));
+    }
+
     @Transactional
     public OperacaoAcao comprar(Long acaoId, Integer quantidade) {
         return comprar(acaoId, quantidade, null);
@@ -52,14 +75,16 @@ public class OperacaoAcaoService {
                 : "Preço de compra deve ser positivo");
 
         OperacaoAcao operacao = new OperacaoAcao();
+        Usuario usuario = usuarioAtual(true);
+        operacao.setUsuario(usuario);
         operacao.setAcao(acao);
         operacao.setQuantidade(quantidade);
         operacao.setPrecoUnitario(precoUnitario);
         operacao.setTipoOperacao(TipoOperacao.COMPRA);
         operacao.setDataOperacao(LocalDateTime.now());
 
-        List<OperacaoAcao> compras = operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA);
-        List<OperacaoAcao> vendas = operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA);
+        List<OperacaoAcao> compras = operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, usuario.getId());
+        List<OperacaoAcao> vendas = operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, usuario.getId());
         PosicaoCalculada posicaoAtual = calcularPosicao(compras, vendas);
         BigDecimal valorNovaCompra = multiplicar(precoUnitario, quantidade);
         operacao.setPrecoMedio(dividir(
@@ -76,8 +101,9 @@ public class OperacaoAcaoService {
         validarPrecoPositivo(precoVenda, "Preço de venda deve ser positivo");
 
         Acao acao = buscarAcao(acaoId);
-        List<OperacaoAcao> compras = operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.COMPRA);
-        List<OperacaoAcao> vendas = operacaoRepository.findByAcaoAndTipoOperacao(acao, TipoOperacao.VENDA);
+        Usuario usuario = usuarioAtual(true);
+        List<OperacaoAcao> compras = operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, usuario.getId());
+        List<OperacaoAcao> vendas = operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, usuario.getId());
         PosicaoCalculada posicaoAtual = calcularPosicao(compras, vendas);
         if (posicaoAtual.quantidade() == 0) {
             throw new EntradaOuOperacaoInvalidaException("Não existe posição comprada para a ação");
@@ -95,6 +121,7 @@ public class OperacaoAcaoService {
                 .doubleValue();
 
         OperacaoAcao venda = new OperacaoAcao();
+        venda.setUsuario(usuario);
         venda.setAcao(acao);
         venda.setQuantidade(quantidade);
         venda.setPrecoUnitario(precoVenda);
@@ -107,29 +134,29 @@ public class OperacaoAcaoService {
     }
 
     public List<OperacaoAcao> listarHistorico(Long acaoId) {
-        return operacaoRepository.findByAcao(buscarAcao(acaoId));
+        return operacaoRepository.findByAcaoAndUsuarioId(buscarAcao(acaoId), usuarioAtual().getId());
     }
 
     public List<OperacaoAcao> listarCompras() {
-        return operacaoRepository.findByTipoOperacao(TipoOperacao.COMPRA);
+        return operacaoRepository.findByTipoOperacaoAndUsuarioId(TipoOperacao.COMPRA, usuarioAtual().getId());
     }
 
     public List<OperacaoAcao> listarVendas() {
-        return operacaoRepository.findByTipoOperacao(TipoOperacao.VENDA);
+        return operacaoRepository.findByTipoOperacaoAndUsuarioId(TipoOperacao.VENDA, usuarioAtual().getId());
     }
 
     public OperacaoAcao buscarPorId(Long id) {
-        return operacaoRepository.findById(id)
+        return operacaoRepository.findByIdAndUsuarioId(id, usuarioAtual().getId())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Operação não encontrada"));
     }
 
     public List<OperacaoAcao> listar() {
-        return operacaoRepository.findAll();
+        return operacaoRepository.findByUsuarioId(usuarioAtual().getId());
     }
 
     public ResumoCarteiraDTO resumirCarteira() {
         Map<Long, List<OperacaoAcao>> operacoesPorAcao = new LinkedHashMap<>();
-        for (OperacaoAcao operacao : operacaoRepository.findAll()) {
+        for (OperacaoAcao operacao : listar()) {
             if (operacao.getAcao() != null && operacao.getAcao().getId() != null) {
                 operacoesPorAcao
                         .computeIfAbsent(operacao.getAcao().getId(), id -> new java.util.ArrayList<>())

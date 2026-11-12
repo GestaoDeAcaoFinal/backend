@@ -136,7 +136,7 @@ class UsuarioServiceTest {
         AlterarSenhaRequest request =
                 new AlterarSenhaRequest("nova-senha-segura");
 
-        when(usuarioRepository.findById(1L))
+        when(usuarioRepository.findForUpdateById(1L))
                 .thenReturn(Optional.of(usuario));
 
         when(passwordEncoder.encode("nova-senha-segura"))
@@ -149,6 +149,7 @@ class UsuarioServiceTest {
         assertThat(usuario.getSenha())
                 .isEqualTo("novo-hash-bcrypt")
                 .isNotEqualTo(request.password());
+        assertThat(usuario.getVersaoSessao()).isEqualTo(1);
 
         verify(passwordEncoder).encode("nova-senha-segura");
         verify(usuarioRepository).save(usuario);

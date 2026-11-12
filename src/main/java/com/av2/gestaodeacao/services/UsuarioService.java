@@ -2,6 +2,8 @@
 package com.av2.gestaodeacao.services;
 
 import com.av2.gestaodeacao.domains.Usuario;
+import com.av2.gestaodeacao.domains.enums.Papel;
+import com.av2.gestaodeacao.exceptions.ConflitoException;
 import com.av2.gestaodeacao.domains.dtos.AlterarSenhaRequest;
 import com.av2.gestaodeacao.domains.dtos.UsuarioCreateRequest;
 import com.av2.gestaodeacao.domains.dtos.UsuarioResponse;
@@ -46,10 +48,25 @@ public class UsuarioService {
     // 8.2 - Alterar cadastro
     @Transactional
     public UsuarioResponse update(Long id, UsuarioUpdateRequest request) {
+        // Bloqueia em ordem estável para impedir dois rebaixamentos simultâneos.
+        List<Usuario> usuarios = usuarioRepository.findAllForUpdate();
         Usuario usuario = findEntity(id);
 
         validarUsernameDisponivel(request.username(), id);
 
+        if (usuario.getPapel() == Papel.ADMIN && Boolean.TRUE.equals(usuario.getAtivo())
+                && (request.papel() != Papel.ADMIN || !Boolean.TRUE.equals(request.ativo()))
+                && usuarios.stream().noneMatch(outro -> !outro.getId().equals(id)
+                    && outro.getPapel() == Papel.ADMIN && Boolean.TRUE.equals(outro.getAtivo()))) {
+            throw new ConflitoException(
+                    "É necessário manter pelo menos um administrador ativo no sistema");
+        }
+
+        if (!java.util.Objects.equals(usuario.getUsername(), request.username())
+                || usuario.getPapel() != request.papel()
+                || !java.util.Objects.equals(usuario.getAtivo(), request.ativo())) {
+            usuario.invalidarSessoes();
+        }
         usuario.setUsername(request.username());
         usuario.setPapel(request.papel());
         usuario.setAtivo(request.ativo());
@@ -60,9 +77,11 @@ public class UsuarioService {
     // 8.3 - Alterar senha
     @Transactional
     public void alterarSenha(Long id, AlterarSenhaRequest request) {
-        Usuario usuario = findEntity(id);
+        Usuario usuario = usuarioRepository.findForUpdateById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário não encontrado"));
 
         usuario.setSenha(passwordEncoder.encode(request.password()));
+        usuario.invalidarSessoes();
 
         usuarioRepository.save(usuario);
     }
