@@ -63,6 +63,20 @@ public final class E2eApplication {
                 status = 200;
                 body = requests.entrySet().stream().map(entry -> "\"" + entry.getKey() + "\":" + entry.getValue())
                         .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+            } else if (path.equals("/quote")) {
+                String query = exchange.getRequestURI().getRawQuery();
+                String ticker = java.util.Arrays.stream(query == null ? new String[0] : query.split("&"))
+                        .filter(part -> part.startsWith("symbol="))
+                        .map(part -> java.net.URLDecoder.decode(part.substring(7), StandardCharsets.UTF_8))
+                        .findFirst().orElse("");
+                if (java.util.Set.of("BRK.A", "BRK.B").contains(ticker)) {
+                    status = 200;
+                    body = "{\"symbol\":\"" + ticker + "\",\"name\":\"Berkshire Hathaway " + ticker
+                            + "\",\"close\":\"500.25\",\"currency\":\"USD\"}";
+                } else {
+                    status = 404;
+                    body = "{\"status\":\"error\",\"code\":404}";
+                }
             } else if (path.startsWith("/api/quote/")) {
                 String ticker = path.substring("/api/quote/".length());
                 if (ticker.equals("ERRO3")) {

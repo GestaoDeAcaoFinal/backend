@@ -6,7 +6,8 @@ import java.util.Locale;
 
 public final class TickerNormalizer {
 
-    private static final String FORMATO_TICKER = "(?=.*[A-Z])[A-Z0-9]{1,12}";
+    public static final String FORMATO_TICKER = "^\\s*(?=[A-Za-z0-9.]{1,12}\\s*$)(?=[A-Za-z0-9.]*[A-Za-z])[A-Za-z0-9]+(?:\\.[A-Za-z0-9]+)*\\s*$";
+    public static final String MENSAGEM_FORMATO = "Ticker deve ter de 1 a 12 caracteres, conter letras e usar ponto somente entre letras ou números";
 
     private TickerNormalizer() {
     }
@@ -18,7 +19,7 @@ public final class TickerNormalizer {
 
         String normalizado = ticker.trim().toUpperCase(Locale.ROOT);
         if (!normalizado.matches(FORMATO_TICKER)) {
-            throw new EntradaOuOperacaoInvalidaException("Ticker deve conter de 1 a 12 letras ou números");
+            throw new EntradaOuOperacaoInvalidaException(MENSAGEM_FORMATO);
         }
         return normalizado;
     }

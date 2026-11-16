@@ -3,6 +3,7 @@ package com.av2.gestaodeacao.resources;
 import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.dtos.AcaoRequestDTO;
 import com.av2.gestaodeacao.services.AcaoService;
+import com.av2.gestaodeacao.validation.TickerNormalizer;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
@@ -42,8 +43,8 @@ public class AcaoResource {
     public Acao buscarPorTicker(
             @PathVariable
             @Pattern(
-                    regexp = "^\\s*(?=.*[A-Za-z])[A-Za-z0-9]{1,12}\\s*$",
-                    message = "Ticker possui formato inválido"
+                    regexp = TickerNormalizer.FORMATO_TICKER,
+                    message = TickerNormalizer.MENSAGEM_FORMATO
             ) String ticker
     ) {
         return service.buscarPorTicker(ticker);

@@ -93,6 +93,20 @@ class AcaoResourceMvcTest {
                 .andExpect(jsonPath("$.status").value(404));
     }
 
+    @Test
+    void buscaClassesComPontoSemAceitarSeparadoresMalformados() throws Exception {
+        for (String ticker : List.of("BRK.A", "brk.b")) {
+            when(acaoService.buscarPorTicker(ticker)).thenReturn(acao(2L, ticker.toUpperCase(java.util.Locale.ROOT)));
+            mockMvc.perform(get("/acoes/ticker/{ticker}", ticker).with(user("professor").roles("ADMIN")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ticker").value(ticker.toUpperCase(java.util.Locale.ROOT)));
+            verify(acaoService).buscarPorTicker(ticker);
+        }
+        for (String ticker : List.of("BRK..B", ".BRK", "BRK.", "123.45")) {
+            mockMvc.perform(get("/acoes/ticker/{ticker}", ticker).with(user("professor").roles("ADMIN"))).andExpect(status().isBadRequest());
+        }
+    }
+
     private Acao acao(Long id, String ticker) {
         Acao acao = new Acao();
         acao.setId(id);

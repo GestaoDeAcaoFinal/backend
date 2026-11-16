@@ -9,6 +9,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class NormalizadoresTest {
 
     @Test
+    void tickerPreservaSeparadorLegitimoENormalizaCaixa() {
+        assertThat(TickerNormalizer.normalizar(" brk.a ")).isEqualTo("BRK.A");
+        assertThat(TickerNormalizer.normalizar("brk.b")).isEqualTo("BRK.B");
+        for (String invalido : new String[]{".BRK", "BRK.", "BRK..B", "BRK/B", "BRK-B", "BRK&B", "BRK B", "123.45", "ABCDEFGHIJK.A", "BRK.B?x=1"}) {
+            assertThatThrownBy(() -> TickerNormalizer.normalizar(invalido))
+                    .as(invalido).isInstanceOf(EntradaOuOperacaoInvalidaException.class);
+        }
+    }
+
+    @Test
     void tickerRemoveEspacosExternosEConverteParaMaiusculas() {
         assertThat(TickerNormalizer.normalizar("  petr4  ")).isEqualTo("PETR4");
         assertThat(TickerNormalizer.normalizar("aapl")).isEqualTo("AAPL");

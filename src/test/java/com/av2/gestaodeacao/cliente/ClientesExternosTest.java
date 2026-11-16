@@ -37,6 +37,18 @@ class ClientesExternosTest {
     private final ProvedorHttpExecutor executor = new ProvedorHttpExecutor();
 
     @ParameterizedTest
+    @ValueSource(strings = {"BRK.A", "BRK.B"})
+    void transmiteSimboloComPontoSemConversao(String ticker) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key");
+        server.expect(requestTo("https://twelve.test/quote?symbol=" + ticker + "&apikey=test-key"))
+                .andRespond(withSuccess("{\"name\":\"Berkshire Hathaway\",\"close\":\"500\",\"currency\":\"USD\"}", MediaType.APPLICATION_JSON));
+        assertThat(cliente.buscarAcao(ticker).currency()).isEqualTo("USD");
+        server.verify();
+    }
+
+    @ParameterizedTest
     @ValueSource(ints = {401, 403})
     void identificaRecusaDeAutenticacaoDoProvedorSemExporAResposta(int status) {
         RestClient.Builder builder = RestClient.builder();

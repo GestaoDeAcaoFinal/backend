@@ -92,6 +92,36 @@ class AcaoServiceTest {
     }
 
     @Test
+    void cadastraClassesComPontoSemAlterarSimboloDoProvedor() {
+        for (String ticker : List.of("BRK.A", "BRK.B")) {
+            prepararCadastro(ticker);
+            when(twelveData.buscarAcao(ticker)).thenReturn(twelve("Berkshire Hathaway", "500", "USD"));
+            Acao salva = service.salvar(novaAcao(" " + ticker.toLowerCase(java.util.Locale.ROOT) + " "));
+            assertThat(salva.getTicker()).isEqualTo(ticker);
+            assertThat(salva.getMercado()).isEqualTo("EUA");
+            assertThat(salva.getMoeda()).isEqualTo("USD");
+            verify(twelveData).buscarAcao(ticker);
+        }
+        verifyNoInteractions(brapi);
+    }
+
+    @Test
+    void bloqueiaDuplicadoComPontoAntesDeConsultarProvedor() {
+        when(repository.findByTicker("BRK.B")).thenReturn(Optional.of(new Acao()));
+        assertThatThrownBy(() -> service.salvar(novaAcao(" brk.b ")))
+                .isInstanceOf(ConflitoException.class).hasMessage("Ticker já cadastrado");
+        verifyNoInteractions(brapi, twelveData, corretoraRepository);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void buscaPorTickerPreservaClasseNormalizada() {
+        Acao existente = new Acao();
+        when(repository.findByTicker("BRK.A")).thenReturn(Optional.of(existente));
+        assertThat(service.buscarPorTicker(" brk.a ")).isSameAs(existente);
+    }
+
+    @Test
     void violacaoConcorrenteDeTickerEhTraduzidaParaConflito() {
         prepararCadastro("PETR4");
         when(brapi.buscarAcao("PETR4")).thenReturn(brapi("Petrobras", "31.42", "BRL"));

@@ -1,5 +1,7 @@
 package com.av2.gestaodeacao.domains.dtos;
 
+import com.av2.gestaodeacao.validation.TickerNormalizer;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -11,8 +13,8 @@ public class AcaoRequestDTO {
 
     @NotBlank(message = "Ticker é obrigatório")
     @Pattern(
-            regexp = "^\\s*(?=.*[A-Za-z])[A-Za-z0-9]{1,12}\\s*$",
-            message = "Ticker deve conter de 1 a 12 letras ou números"
+            regexp = TickerNormalizer.FORMATO_TICKER,
+            message = TickerNormalizer.MENSAGEM_FORMATO
     )
     private String ticker;
 
