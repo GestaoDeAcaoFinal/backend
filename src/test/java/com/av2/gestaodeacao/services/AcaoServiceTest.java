@@ -193,6 +193,7 @@ class AcaoServiceTest {
 
     @Test
     void falhas502E503PreservamCotacaoETimestampAnteriores() {
+        verificarFalhaAtomica(new com.av2.gestaodeacao.exceptions.LimiteDeConsultasException("Twelve Data", 60));
         verificarFalhaAtomica(new FalhaDeProvedorException("Brapi"));
         verificarFalhaAtomica(new ProvedorIndisponivelException("Brapi"));
     }

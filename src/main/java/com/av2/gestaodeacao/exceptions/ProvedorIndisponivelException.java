@@ -1,6 +1,9 @@
 package com.av2.gestaodeacao.exceptions;
 
 public class ProvedorIndisponivelException extends RuntimeException {
+    public ProvedorIndisponivelException(String provedor, String orientacao) {
+        super("O provedor " + provedor + " está indisponível. " + orientacao);
+    }
     public ProvedorIndisponivelException(String provedor) {
         super("O provedor " + provedor + " está indisponível");
     }

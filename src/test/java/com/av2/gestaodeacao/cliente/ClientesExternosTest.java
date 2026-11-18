@@ -36,12 +36,51 @@ class ClientesExternosTest {
 
     private final ProvedorHttpExecutor executor = new ProvedorHttpExecutor();
 
+    @Test
+    void identificaLimiteHttpSemConfundirComSessaoOuExporResposta() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
+        server.expect(requestTo("https://twelve.test/quote?symbol=AAPL&apikey=test-key"))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "60")
+                        .contentType(MediaType.APPLICATION_JSON).body("{\"message\":\"sensitive-test-key\"}"));
+        assertThatThrownBy(() -> cliente.buscarAcao("AAPL"))
+                .isInstanceOf(ProvedorIndisponivelException.class)
+                .hasMessageContaining("limite").hasMessageNotContaining("sensitive-test-key");
+        server.verify();
+    }
+
+    @Test
+    void identificaLimiteJsonMesmoComHttp200() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
+        server.expect(requestTo("https://twelve.test/quote?symbol=AAPL&apikey=test-key"))
+                .andRespond(withSuccess("{\"code\":429,\"status\":\"error\",\"message\":\"test-secret\"}", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> cliente.buscarAcao("AAPL"))
+                .isInstanceOf(ProvedorIndisponivelException.class)
+                .hasMessageContaining("limite").hasMessageNotContaining("test-secret");
+        server.verify();
+    }
+
+    @Test
+    void reutilizaCambioValidoSemNovaChamadaAoProvedor() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
+        server.expect(once(), requestTo("https://twelve.test/exchange_rate?symbol=USD/BRL&apikey=test-key"))
+                .andRespond(withSuccess("{\"rate\":5.25}", MediaType.APPLICATION_JSON));
+        assertThat(cliente.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.25");
+        assertThat(cliente.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.25");
+        server.verify();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"BRK.A", "BRK.B"})
     void transmiteSimboloComPontoSemConversao(String ticker) {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key");
+        TwelveDataCliente cliente = new TwelveDataCliente(builder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
         server.expect(requestTo("https://twelve.test/quote?symbol=" + ticker + "&apikey=test-key"))
                 .andRespond(withSuccess("{\"name\":\"Berkshire Hathaway\",\"close\":\"500\",\"currency\":\"USD\"}", MediaType.APPLICATION_JSON));
         assertThat(cliente.buscarAcao(ticker).currency()).isEqualTo("USD");
@@ -72,7 +111,7 @@ class ClientesExternosTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
 
         TwelveDataCliente cliente = new TwelveDataCliente(
-                builder, executor, "https://twelve.test", "test-key");
+                builder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
 
         server.expect(once(), requestTo(
                         "https://twelve.test/exchange_rate?symbol=USD/BRL&apikey=test-key"))
@@ -135,7 +174,7 @@ class ClientesExternosTest {
                 MockRestServiceServer.bindTo(twelveBuilder).build();
 
         TwelveDataCliente twelve = new TwelveDataCliente(
-                twelveBuilder, executor, "https://twelve.test", "test-key");
+                twelveBuilder, executor, "https://twelve.test", "test-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
 
         twelveServer.expect(requestTo(
                         "https://twelve.test/quote?symbol=AAPL&apikey=test-key"))
@@ -236,7 +275,7 @@ class ClientesExternosTest {
                 MockRestServiceServer.bindTo(invalidBuilder).build();
 
         TwelveDataCliente invalidClient = new TwelveDataCliente(
-                invalidBuilder, executor, "https://twelve.test", "secret-key");
+                invalidBuilder, executor, "https://twelve.test", "secret-key", new com.av2.gestaodeacao.cliente.support.TwelveDataLimitador(8, 8, 0, 1000), 300);
 
         invalidServer.expect(requestTo(
                         "https://twelve.test/quote?symbol=AAPL&apikey=secret-key"))

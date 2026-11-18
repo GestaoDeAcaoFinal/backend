@@ -41,6 +41,9 @@ public final class E2eApplication {
                 Map.entry("twelvedata.api.key", "e2e-provider-only"),
                 Map.entry("integracoes.brapi.base-url", "http://127.0.0.1:19090"),
                 Map.entry("integracoes.twelvedata.base-url", "http://127.0.0.1:19090"),
+                Map.entry("integracoes.twelvedata.creditos-por-janela", "8"),
+                Map.entry("integracoes.twelvedata.janela-ms", "800"),
+                Map.entry("integracoes.twelvedata.margem-ms", "25"),
                 Map.entry("integracoes.brasilapi.base-url", "http://127.0.0.1:19090"),
                 Map.entry("integracoes.viacep.base-url", "http://127.0.0.1:19090"),
                 Map.entry("integracoes.cvm.base-url", "http://127.0.0.1:19090"),
@@ -50,26 +53,49 @@ public final class E2eApplication {
         properties.forEach(System::setProperty);
         AtomicBoolean ready = new AtomicBoolean();
         Map<String, AtomicInteger> requests = new ConcurrentHashMap<>();
+        java.util.Deque<Long> twelveStarts = new java.util.ArrayDeque<>();
         HttpServer provider = HttpServer.create(new InetSocketAddress("127.0.0.1", 19090), 0);
         provider.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath();
             requests.computeIfAbsent(path, ignored -> new AtomicInteger()).incrementAndGet();
             int status = 501;
             String body = "{\"error\":true,\"message\":\"Endpoint não previsto no teste\"}";
-            if (path.equals("/__e2e/ready")) {
+            boolean limiteExcedido = false;
+            if (path.equals("/quote") || path.equals("/exchange_rate")) {
+                synchronized (twelveStarts) {
+                    long agora = System.nanoTime();
+                    while (!twelveStarts.isEmpty() && agora - twelveStarts.peekFirst() >= java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(800)) twelveStarts.removeFirst();
+                    limiteExcedido = twelveStarts.size() >= 8;
+                    if (!limiteExcedido) twelveStarts.addLast(agora);
+                }
+            }
+            if (limiteExcedido) {
+                requests.computeIfAbsent("TWELVE_RATE_LIMIT_ERRORS", ignored -> new AtomicInteger()).incrementAndGet();
+                status = 429; body = "{\"code\":429,\"status\":\"error\"}";
+            } else if (path.equals("/__e2e/ready")) {
                 status = ready.get() ? 200 : 503;
                 body = "{\"ready\":" + ready.get() + "}";
             } else if (path.equals("/__e2e/stats")) {
                 status = 200;
                 body = requests.entrySet().stream().map(entry -> "\"" + entry.getKey() + "\":" + entry.getValue())
                         .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+            } else if (path.equals("/exchange_rate")) {
+                status = 200;
+                body = "{\"symbol\":\"USD/BRL\",\"rate\":5.25}";
             } else if (path.equals("/quote")) {
                 String query = exchange.getRequestURI().getRawQuery();
                 String ticker = java.util.Arrays.stream(query == null ? new String[0] : query.split("&"))
                         .filter(part -> part.startsWith("symbol="))
                         .map(part -> java.net.URLDecoder.decode(part.substring(7), StandardCharsets.UTF_8))
                         .findFirst().orElse("");
-                if (java.util.Set.of("BRK.A", "BRK.B").contains(ticker)) {
+                if (ticker.equals("LIMITE")) {
+                    requests.computeIfAbsent("TWELVE_RATE_LIMIT_ERRORS", ignored -> new AtomicInteger()).incrementAndGet();
+                    exchange.getResponseHeaders().set("Retry-After", "60");
+                    status = 429; body = "{\"code\":429,\"status\":\"error\"}";
+                } else if (java.util.Set.of("AAPL", "TSLA", "MSFT", "PARA", "F", "GOOG", "BA", "KO", "GOOGL").contains(ticker)) {
+                    status = 200;
+                    body = "{\"symbol\":\"" + ticker + "\",\"name\":\"Empresa E2E " + ticker + "\",\"close\":\"100.25\",\"currency\":\"USD\"}";
+                } else if (java.util.Set.of("BRK.A", "BRK.B").contains(ticker)) {
                     status = 200;
                     body = "{\"symbol\":\"" + ticker + "\",\"name\":\"Berkshire Hathaway " + ticker
                             + "\",\"close\":\"500.25\",\"currency\":\"USD\"}";
