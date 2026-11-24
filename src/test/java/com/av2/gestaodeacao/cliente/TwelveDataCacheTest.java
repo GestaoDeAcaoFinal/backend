@@ -16,6 +16,46 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 class TwelveDataCacheTest {
+    @ParameterizedTest
+    @ValueSource(longs = {-1, 3601})
+    void recusaCacheForaDosLimitesAntesDeConsultarProvedor(long segundos) {
+        assertThatThrownBy(() -> new TwelveDataCliente(builder, new ProvedorHttpExecutor(),
+                "https://twelve.test", "test-key", new TwelveDataLimitador(8, 8, 0, 1000),
+                segundos, now::get))
+                .isExactlyInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("entre 0 e 3600");
+        server.verify();
+    }
+
+    @Test
+    void cacheDesabilitadoConsultaNovamenteMesmoSemAvancarRelogio() {
+        TwelveDataCliente semCache = new TwelveDataCliente(builder, new ProvedorHttpExecutor(),
+                "https://twelve.test", "test-key", new TwelveDataLimitador(8, 8, 0, 1000),
+                0, now::get);
+        server.expect(requestTo(FX)).andRespond(withSuccess("{\"rate\":5.25}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(FX)).andRespond(withSuccess("{\"rate\":5.50}", MediaType.APPLICATION_JSON));
+
+        assertThat(semCache.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.25");
+        assertThat(semCache.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.50");
+        server.verify();
+    }
+
+    @Test
+    void cacheMaximoExpiraExatamenteAoCompletarUmaHora() {
+        TwelveDataCliente cacheMaximo = new TwelveDataCliente(builder, new ProvedorHttpExecutor(),
+                "https://twelve.test", "test-key", new TwelveDataLimitador(8, 8, 0, 1000),
+                3600, now::get);
+        server.expect(requestTo(FX)).andRespond(withSuccess("{\"rate\":5.25}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(FX)).andRespond(withSuccess("{\"rate\":5.50}", MediaType.APPLICATION_JSON));
+
+        assertThat(cacheMaximo.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.25");
+        now.set(TimeUnit.SECONDS.toNanos(3599));
+        assertThat(cacheMaximo.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.25");
+        now.set(TimeUnit.SECONDS.toNanos(3600));
+        assertThat(cacheMaximo.buscarTaxaCambio("USD", "BRL")).isEqualByComparingTo("5.50");
+        server.verify();
+    }
+
     @Test
     void esperaDeCambioPodeSerInterrompidaDuranteFalhaConcorrente() throws Exception {
         CountDownLatch providerEntered = new CountDownLatch(1), releaseProvider = new CountDownLatch(1), finished = new CountDownLatch(1);

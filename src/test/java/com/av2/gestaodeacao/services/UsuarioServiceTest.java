@@ -8,8 +8,12 @@ import com.av2.gestaodeacao.domains.dtos.UsuarioUpdateRequest;
 import com.av2.gestaodeacao.domains.dtos.UsuarioResponse;
 import com.av2.gestaodeacao.domains.enums.Papel;
 import com.av2.gestaodeacao.repositories.UsuarioRepository;
+import com.av2.gestaodeacao.exceptions.ConflitoException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -18,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class UsuarioServiceTest {
+    private AutoCloseable mocks;
 
     @Mock
     private UsuarioRepository usuarioRepository;
@@ -37,7 +43,114 @@ class UsuarioServiceTest {
 
     @BeforeEach
     void configurarMocks() {
-        MockitoAnnotations.openMocks(this);
+        mocks = MockitoAnnotations.openMocks(this);
+    }
+
+    @AfterEach
+    void liberarMocks() throws Exception {
+        mocks.close();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"USER,true", "ADMIN,false", "USER,false"})
+    void impedeRemoverUltimoAdminMesmoComOutrasContasInativasOuSemPermissao(Papel novoPapel, boolean novoAtivo) {
+        Usuario admin = criarUsuario(1L, "ana");
+        admin.setPapel(Papel.ADMIN);
+        Usuario investidor = criarUsuario(2L, "investidor");
+        Usuario adminInativo = criarUsuario(3L, "adminInativo");
+        adminInativo.setPapel(Papel.ADMIN);
+        adminInativo.setAtivo(false);
+        when(usuarioRepository.findAllForUpdate()).thenReturn(List.of(admin, investidor, adminInativo));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(admin));
+
+        assertThatThrownBy(() -> usuarioService.update(1L, new UsuarioUpdateRequest("ana", novoPapel, novoAtivo)))
+                .isExactlyInstanceOf(ConflitoException.class)
+                .hasMessageContaining("pelo menos um administrador ativo");
+
+        assertThat(admin.getPapel()).isEqualTo(Papel.ADMIN);
+        assertThat(admin.getAtivo()).isTrue();
+        assertThat(admin.getVersaoSessao()).isZero();
+        verify(usuarioRepository, never()).save(any(Usuario.class));
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"USER,true", "ADMIN,false", "USER,false"})
+    void permiteAlteracaoQuandoExisteOutroAdminAtivoEInvalidaSessao(Papel novoPapel, boolean novoAtivo) {
+        Usuario admin = criarUsuario(1L, "ana");
+        admin.setPapel(Papel.ADMIN);
+        Usuario investidor = criarUsuario(2L, "investidor");
+        Usuario inativo = criarUsuario(3L, "inativo");
+        inativo.setPapel(Papel.ADMIN);
+        inativo.setAtivo(false);
+        Usuario outroAdmin = criarUsuario(4L, "outroAdmin");
+        outroAdmin.setPapel(Papel.ADMIN);
+        when(usuarioRepository.findAllForUpdate()).thenReturn(List.of(admin, investidor, inativo, outroAdmin));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(usuarioRepository.findByUsername("ana")).thenReturn(Optional.of(admin));
+        when(usuarioRepository.save(admin)).thenReturn(admin);
+
+        UsuarioResponse resposta = usuarioService.update(1L, new UsuarioUpdateRequest("ana", novoPapel, novoAtivo));
+
+        assertThat(resposta.papel()).isEqualTo(novoPapel);
+        assertThat(resposta.ativo()).isEqualTo(novoAtivo);
+        assertThat(admin.getVersaoSessao()).isEqualTo(1);
+        assertThat(outroAdmin.getPapel()).isEqualTo(Papel.ADMIN);
+        assertThat(outroAdmin.getAtivo()).isTrue();
+        verify(usuarioRepository).findAllForUpdate();
+        verify(usuarioRepository).save(admin);
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "USER,true,ana,USER,true,0",
+            "USER,true,anaNova,USER,true,1",
+            "USER,true,ana,ADMIN,true,1",
+            "USER,true,ana,USER,false,1",
+            "ADMIN,true,ana,ADMIN,true,0",
+            "ADMIN,true,anaNova,ADMIN,true,1",
+            "ADMIN,false,ana,ADMIN,true,1",
+            "ADMIN,false,ana,USER,false,1"
+    })
+    void versaoDeSessaoMudaSomenteQuandoDadosDeAcessoMudam(
+            Papel papelAtual, boolean ativoAtual, String novoNome,
+            Papel novoPapel, boolean novoAtivo, int incremento) {
+        Usuario usuario = criarUsuario(1L, "ana");
+        usuario.setPapel(papelAtual);
+        usuario.setAtivo(ativoAtual);
+        usuario.invalidarSessoes();
+        usuario.invalidarSessoes();
+        Usuario adminSistema = criarUsuario(99L, "adminSistema");
+        adminSistema.setPapel(Papel.ADMIN);
+        when(usuarioRepository.findAllForUpdate()).thenReturn(List.of(usuario, adminSistema));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByUsername(novoNome))
+                .thenReturn(novoNome.equals("ana") ? Optional.of(usuario) : Optional.empty());
+        when(usuarioRepository.save(usuario)).thenReturn(usuario);
+
+        UsuarioResponse resposta = usuarioService.update(1L, new UsuarioUpdateRequest(novoNome, novoPapel, novoAtivo));
+
+        assertThat(resposta.username()).isEqualTo(novoNome);
+        assertThat(resposta.papel()).isEqualTo(novoPapel);
+        assertThat(resposta.ativo()).isEqualTo(novoAtivo);
+        assertThat(usuario.getVersaoSessao()).isEqualTo(2L + incremento);
+        assertThat(usuario.getSenha()).isEqualTo("hash-bcrypt");
+        verify(usuarioRepository).save(usuario);
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void senhaDeUsuarioInexistenteNaoCodificaNemPersiste() {
+        when(usuarioRepository.findForUpdateById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> usuarioService.alterarSenha(999L, new AlterarSenhaRequest("nova-senha-segura")))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        erro -> assertThat(erro.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verifyNoInteractions(passwordEncoder);
+        verify(usuarioRepository, never()).save(any(Usuario.class));
     }
 
     @Test
