@@ -253,7 +253,7 @@ No PowerShell:
 
 Os testes automatizados usam H2, fixtures e servidores HTTP simulados; não exigem Docker, internet ou credenciais reais.
 
-O comando `clean verify` também gera o relatório JaCoCo e verifica os limites globais de **85% de linhas e 85% de branches**. O resultado de 260 testes, com 95,69% de linhas e 89,12% de branches, e os cenários acrescentados estão em [Cobertura 85/85](docs/cobertura-85-85.md).
+O comando `clean verify` também gera o relatório JaCoCo e verifica os limites globais de **85% de linhas e 85% de branches**. O resultado de 286 testes, com 97,85% de linhas e 92,06% de branches globais e 100% no pacote config, e os cenários acrescentados estão em [Cobertura 85/85](docs/cobertura-85-85.md).
 
 ## Segurança e autenticação JWT
 

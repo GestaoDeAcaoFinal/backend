@@ -5,6 +5,9 @@ import com.av2.gestaodeacao.config.JwtProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -22,6 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -106,6 +110,34 @@ class AuthResourceIntegrationTest {
         jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username = ?", USUARIO);
         mockMvc.perform(get("/api/usuarios").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("permissoesSemPapelUnico")
+    void assinaturaValidaNaoAutorizaTokenSemUmUnicoPapel(String cenario, List<String> permissoes) throws Exception {
+        String token = gerarTokenComPermissoes(permissoes);
+
+        mockMvc.perform(get("/api/usuarios").header("Authorization", "Bearer " + token))
+                .andExpect(status().isUnauthorized());
+    }
+
+    static Stream<Arguments> permissoesSemPapelUnico() {
+        return Stream.of(
+                Arguments.of("claim ausente", null),
+                Arguments.of("lista vazia", List.of()),
+                Arguments.of("dois papeis distintos", List.of("ROLE_ADMIN", "ROLE_USER")),
+                Arguments.of("papel duplicado", List.of("ROLE_ADMIN", "ROLE_ADMIN")),
+                Arguments.of("apenas scope sem papel", List.of("SCOPE_leitura"))
+        );
+    }
+
+    @Test
+    void scopeAdicionalNaoImpedePapelAdminValido() throws Exception {
+        String token = gerarTokenComPermissoes(List.of("SCOPE_leitura", "ROLE_ADMIN"));
+
+        mockMvc.perform(get("/api/usuarios").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
     }
 
     @Test
@@ -281,24 +313,29 @@ class AuthResourceIntegrationTest {
 
     private String gerarTokenComPapelUser() {
         jdbcTemplate.update("UPDATE usuario SET papel = 'USER' WHERE username = ?", USUARIO);
+        return gerarTokenComPermissoes(List.of("ROLE_USER"));
+    }
+
+    private String gerarTokenComPermissoes(List<String> permissoes) {
         Instant agora = Instant.now();
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
                 .issuer(jwtProperties.issuer())
                 .issuedAt(agora)
                 .expiresAt(agora.plusSeconds(3600))
                 .subject(USUARIO)
                 .claim("uid", "999999")
-                .claim("sv", "0")
-                .claim("authorities", List.of("ROLE_USER"))
-                .build();
+                .claim("sv", "0");
+        if (permissoes != null) {
+            claims.claim("authorities", permissoes);
+        }
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256)
                 .type("JWT")
                 .build();
 
         return jwtEncoder.encode(
-                JwtEncoderParameters.from(header, claims)
+                JwtEncoderParameters.from(header, claims.build())
         ).getTokenValue();
     }
 

@@ -4,15 +4,15 @@ A meta global (`BUNDLE`) é de pelo menos 85% das linhas e 85% dos branches. As 
 
 ## Resultado medido
 
-| Indicador | Antes | Depois |
-| --- | --- | --- |
-| Testes | 187 | 260 |
-| Linhas | 785/836 — 93,90% | 800/836 — 95,69% |
-| Branches | 248/340 — 72,94% | 303/340 — 89,12% |
-| Classes analisadas | 57 | 57 |
-| `clean verify` com limite 85/85 | Falha de cobertura | Sucesso |
+| Indicador | Antes | Primeira ampliação | Com testes de config |
+| --- | --- | --- | --- |
+| Testes | 187 | 260 | 286 |
+| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 818/836 — 97,85% |
+| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 313/340 — 92,06% |
+| Classes analisadas | 57 | 57 | 57 |
+| `clean verify` com limite 85/85 | Falha de cobertura | Sucesso | Sucesso |
 
-O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. Os 73 novos casos verificam decisões já implementadas.
+O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, verificando decisões já implementadas.
 
 ## Casos acrescentados
 
@@ -22,6 +22,22 @@ O denominador da medição não foi reduzido: nenhuma classe foi excluída e nen
 - `ApiExceptionHandlerTest`: três casos para agrupamento de mensagens de validação, nomes de parâmetros indisponíveis e texto padrão quando uma mensagem não é fornecida.
 
 Os quatro clientes, `UsuarioService` e `ApiExceptionHandler` atingiram 100% dos branches no relatório desta execução. Isso não significa que todo o backend ou todos os comportamentos possíveis estejam cobertos.
+
+## Complemento do pacote config
+
+O pacote passou de 57/75 linhas (76%) e 14/24 branches (58,33%) para **75/75 linhas e 24/24 branches, ambos 100%**. As três classes também atingiram 100% de instruções:
+
+| Classe | Linhas | Branches |
+| --- | --- | --- |
+| `AdminInitializer` | 15/15 | 2/2 |
+| `JwtProperties` | 8/8 | 14/14 |
+| `SecurityConfig` | 52/52 | 8/8 |
+
+- `AdminInitializerTest`: seis casos para criação com hash BCrypt, preservação de quatro combinações de papel/status de contas existentes e idempotência. Usa repositório simulado e não cria usuários no banco de desenvolvimento.
+- `JwtPropertiesTest`: 14 casos para segredo nulo/curto, limite de 32 bytes UTF-8, duração nula/zero/negativa/positiva e emissor nulo/vazio/em branco.
+- `AuthResourceIntegrationTest`: seis novos casos HTTP com JWTs assinados pelo encoder real de teste. Claims ausentes, vazios, múltiplos, duplicados ou apenas com scope são rejeitados; um único papel ADMIN válido com scope adicional é aceito. Os claims de identidade e versão permanecem válidos para isolar a validação das permissões.
+
+`AdminInitializer` é exclusivo do perfil `dev`, enquanto a suíte Spring utiliza `test`; sua lógica é exercitada diretamente nos novos testes unitários. Nenhum perfil de produção foi ativado na suíte. Os 40 testes focados de config/autenticação passaram antes da execução limpa completa com 286 testes.
 
 ## Como reproduzir
 
