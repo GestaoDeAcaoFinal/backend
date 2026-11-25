@@ -1,6 +1,7 @@
 package com.av2.gestaodeacao.cliente.support;
 
 import com.av2.gestaodeacao.exceptions.LimiteDeConsultasException;
+import com.av2.gestaodeacao.exceptions.AguardarCotaException;
 import com.av2.gestaodeacao.exceptions.ProvedorIndisponivelException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,18 +10,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /** Orçamento por instância do backend, compartilhado por quotes e câmbio. */
 @Component
 public class TwelveDataLimitador {
     @FunctionalInterface interface Pausa { void aguardar(long nanos) throws InterruptedException; }
     private final ReentrantLock lock = new ReentrantLock(true);
-    private final long intervaloNanos;
+    private final int creditos;
+    private final long janelaNanos;
+    private final Deque<Long> consultas = new ArrayDeque<>();
     private final long esperaMaximaMillis;
     private final LongSupplier relogio;
     private final Pausa pausa;
-    private boolean iniciou, emCooldown;
-    private long proximaConsulta, fimCooldown;
+    private boolean emCooldown;
+    private long fimCooldown;
 
     @Autowired
     public TwelveDataLimitador(
@@ -33,8 +38,8 @@ public class TwelveDataLimitador {
 
     TwelveDataLimitador(int creditos, long janelaMillis, long margemMillis, long esperaMaximaMillis, LongSupplier relogio, Pausa pausa) {
         if (creditos < 1 || creditos > 1_000_000 || janelaMillis < 1 || janelaMillis > 86_400_000 || margemMillis < 0 || margemMillis > janelaMillis || esperaMaximaMillis < 1 || esperaMaximaMillis > 60_000) throw new IllegalArgumentException("Configuração de limite Twelve Data inválida");
-        long janelaNanos = TimeUnit.MILLISECONDS.toNanos(janelaMillis);
-        this.intervaloNanos = (janelaNanos + creditos - 1) / creditos + TimeUnit.MILLISECONDS.toNanos(margemMillis);
+        this.creditos = creditos;
+        this.janelaNanos = TimeUnit.MILLISECONDS.toNanos(janelaMillis + margemMillis);
         this.esperaMaximaMillis = esperaMaximaMillis;
         this.relogio = relogio; this.pausa = pausa;
     }
@@ -47,9 +52,20 @@ public class TwelveDataLimitador {
             long agora = relogio.getAsLong();
             if (emCooldown && fimCooldown - agora > 0) throw new LimiteDeConsultasException("Twelve Data", Math.max(1, TimeUnit.NANOSECONDS.toSeconds(fimCooldown - agora) + 1));
             emCooldown = false;
-            if (iniciou && proximaConsulta - agora > TimeUnit.MILLISECONDS.toNanos(esperaMaximaMillis)) throw new ProvedorIndisponivelException("Twelve Data", "Aguarde a próxima janela de consultas.");
-            while (iniciou && proximaConsulta - agora > 0) { pausa.aguardar(proximaConsulta - agora); agora = relogio.getAsLong(); }
-            iniciou = true; proximaConsulta = agora + intervaloNanos;
+            removerExpiradas(agora);
+            if (consultas.size() >= creditos) {
+                long restante = janelaNanos - (agora - consultas.getFirst());
+                if (restante > TimeUnit.MILLISECONDS.toNanos(esperaMaximaMillis)) {
+                    throw new AguardarCotaException((restante + 999_999_999L) / 1_000_000_000L);
+                }
+                while (consultas.size() >= creditos) {
+                    pausa.aguardar(janelaNanos - (agora - consultas.getFirst()));
+                    agora = relogio.getAsLong();
+                    removerExpiradas(agora);
+                }
+            }
+            // Falhas também gastam crédito: a reserva acontece antes da chamada HTTP.
+            consultas.addLast(agora);
             try { return chamada.get(); }
             catch (LimiteDeConsultasException e) { emCooldown = true; fimCooldown = relogio.getAsLong() + TimeUnit.SECONDS.toNanos(e.getTentarAposSegundos()); throw e; }
         } catch (InterruptedException e) {
@@ -59,4 +75,8 @@ public class TwelveDataLimitador {
     }
 
     public long getEsperaMaximaMillis() { return esperaMaximaMillis; }
+
+    private void removerExpiradas(long agora) {
+        while (!consultas.isEmpty() && agora - consultas.getFirst() >= janelaNanos) consultas.removeFirst();
+    }
 }

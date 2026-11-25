@@ -1,6 +1,7 @@
 package com.av2.gestaodeacao.resources.exceptions;
 
 import com.av2.gestaodeacao.exceptions.ConflitoException;
+import com.av2.gestaodeacao.exceptions.AguardarCotaException;
 import com.av2.gestaodeacao.exceptions.DadoExternoNaoEncontradoException;
 import com.av2.gestaodeacao.exceptions.EntradaOuOperacaoInvalidaException;
 import com.av2.gestaodeacao.exceptions.FalhaDeProvedorException;
@@ -10,6 +11,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.method.ParameterValidationResult;
@@ -27,6 +29,15 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(AguardarCotaException.class)
+    public ResponseEntity<ProblemDetail> handleAguardarCota(AguardarCotaException exception) {
+        ProblemDetail problem = criarProblema(HttpStatus.SERVICE_UNAVAILABLE, "Aguardando cota", exception.getMessage());
+        problem.setProperty("codigo", "AGUARDANDO_COTA");
+        problem.setProperty("tentarAposSegundos", exception.getTentarAposSegundos());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", Long.toString(exception.getTentarAposSegundos())).body(problem);
+    }
 
     @ExceptionHandler(EntradaOuOperacaoInvalidaException.class)
     public ProblemDetail handleEntradaInvalida(EntradaOuOperacaoInvalidaException exception) {

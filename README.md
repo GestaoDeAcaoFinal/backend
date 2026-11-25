@@ -253,7 +253,7 @@ No PowerShell:
 
 Os testes automatizados usam H2, fixtures e servidores HTTP simulados; não exigem Docker, internet ou credenciais reais.
 
-O comando `clean verify` também gera o relatório JaCoCo e verifica os limites globais de **85% de linhas e 85% de branches**. Após incluir CPF e telefone no cadastro, a execução local passou com **376 testes**, **98,75% de linhas** e **98,33% de branches**. As regras, a migração de contas antigas e os testes estão em [Cadastro de perfil](docs/cadastro-perfil.md). O histórico da ampliação anterior está em [Cobertura 85/85](docs/cobertura-85-85.md).
+O comando `clean verify` também gera o relatório JaCoCo e verifica os limites globais de **85% de linhas e 85% de branches**. Após a otimização de cotações, a execução local passou com **382 testes**, **98,78% de linhas** e **98,34% de branches**. O controle de créditos e a validação estão em [Otimização de cotações](docs/otimizacao-cotacoes.md). As regras do perfil e a migração estão em [Cadastro de perfil](docs/cadastro-perfil.md); o histórico da ampliação anterior está em [Cobertura 85/85](docs/cobertura-85-85.md).
 
 ## Segurança e autenticação JWT
 

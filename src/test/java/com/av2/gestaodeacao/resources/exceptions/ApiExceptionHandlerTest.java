@@ -21,6 +21,16 @@ import static org.mockito.Mockito.when;
 
 class ApiExceptionHandlerTest {
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"0,1", "61,61", "86401,86400"})
+    void cotaLocalExplicaPrazoSemConfundirComFalhaExterna(long recebido, long esperado) {
+        var resposta = handler.handleAguardarCota(new com.av2.gestaodeacao.exceptions.AguardarCotaException(recebido));
+        assertThat(resposta.getStatusCode().value()).isEqualTo(503);
+        assertThat(resposta.getHeaders().getFirst("Retry-After")).isEqualTo(Long.toString(esperado));
+        assertThat(resposta.getBody().getProperties()).containsEntry("codigo", "AGUARDANDO_COTA")
+                .containsEntry("tentarAposSegundos", esperado);
+    }
+
     private final ApiExceptionHandler handler = new ApiExceptionHandler();
 
     @ParameterizedTest

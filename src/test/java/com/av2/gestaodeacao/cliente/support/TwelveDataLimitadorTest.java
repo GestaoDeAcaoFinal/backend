@@ -1,6 +1,7 @@
 package com.av2.gestaodeacao.cliente.support;
 
 import com.av2.gestaodeacao.exceptions.LimiteDeConsultasException;
+import com.av2.gestaodeacao.exceptions.AguardarCotaException;
 import com.av2.gestaodeacao.exceptions.ProvedorIndisponivelException;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
@@ -10,6 +11,15 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.*;
 
 class TwelveDataLimitadorTest {
+    @Test
+    void oitoCreditosDisponiveisNaoImpoemEsperaArtificial() {
+        AtomicLong now = new AtomicLong();
+        TwelveDataLimitador gate = new TwelveDataLimitador(8, 60_000, 100, 15000, now::get, now::addAndGet);
+        List<Long> starts = new ArrayList<>();
+        for (int i = 0; i < 8; i++) gate.executar(() -> { starts.add(now.get()); return 1; });
+        assertThat(starts).hasSize(8).containsOnly(0L);
+        assertThat(now.get()).isZero();
+    }
     @Test
     void consultaConcorrenteExpiraSemExecutarProvedorETravaPodeSerReutilizada() throws Exception {
         AtomicLong now = new AtomicLong();
@@ -76,9 +86,15 @@ class TwelveDataLimitadorTest {
         AtomicLong now = new AtomicLong();
         TwelveDataLimitador gate = new TwelveDataLimitador(8, 60_000, 100, 15000, now::get, now::addAndGet);
         List<Long> starts = new ArrayList<>();
-        for (int i = 0; i < 10; i++) gate.executar(() -> { starts.add(now.get()); return 1; });
+        for (int i = 0; i < 10; i++) {
+            try { gate.executar(() -> { starts.add(now.get()); return 1; }); }
+            catch (AguardarCotaException erro) {
+                now.addAndGet(TimeUnit.SECONDS.toNanos(erro.getTentarAposSegundos()));
+                gate.executar(() -> { starts.add(now.get()); return 1; });
+            }
+        }
         assertThat(starts).hasSize(10);
-        assertThat(starts.get(8)).isEqualTo(TimeUnit.MILLISECONDS.toNanos(60_800));
+        assertThat(starts.get(8)).isEqualTo(TimeUnit.SECONDS.toNanos(61));
         for (long end : starts) assertThat(starts.stream().filter(t -> t > end - TimeUnit.MINUTES.toNanos(1) && t <= end).count()).isLessThanOrEqualTo(8);
     }
 
@@ -96,7 +112,7 @@ class TwelveDataLimitadorTest {
     @Test
     void concorrenciaUsaMesmoOrcamento() throws Exception {
         AtomicLong now = new AtomicLong();
-        TwelveDataLimitador gate = new TwelveDataLimitador(8, 60_000, 100, 15000, now::get, now::addAndGet);
+        TwelveDataLimitador gate = new TwelveDataLimitador(8, 800, 25, 15000, now::get, now::addAndGet);
         ExecutorService pool = Executors.newFixedThreadPool(4);
         List<Long> starts = new CopyOnWriteArrayList<>();
         try {
@@ -104,8 +120,31 @@ class TwelveDataLimitadorTest {
             for (int i = 0; i < 12; i++) futures.add(pool.submit(() -> gate.executar(() -> { starts.add(now.get()); return 1; })));
             for (Future<Integer> future : futures) assertThat(future.get(2, TimeUnit.SECONDS)).isEqualTo(1);
             assertThat(starts).hasSize(12);
-            for (int i = 1; i < starts.size(); i++) assertThat(starts.get(i) - starts.get(i - 1)).isGreaterThanOrEqualTo(TimeUnit.MILLISECONDS.toNanos(7600));
+            for (long end : starts) assertThat(starts.stream().filter(t -> t > end - TimeUnit.MILLISECONDS.toNanos(800) && t <= end).count()).isLessThanOrEqualTo(8);
         } finally { pool.shutdownNow(); }
+    }
+
+    @Test
+    void aguardaApenasJanelaNecessariaEPreservaMargemNoLimiteExato() {
+        AtomicLong now = new AtomicLong();
+        TwelveDataLimitador gate = new TwelveDataLimitador(1, 1000, 100, 2000, now::get, now::addAndGet);
+        gate.executar(() -> 1);
+        now.set(TimeUnit.MILLISECONDS.toNanos(1099));
+        assertThat(gate.executar(now::get)).isEqualTo(TimeUnit.MILLISECONDS.toNanos(1100));
+    }
+
+    @Test
+    void orcamentoLocalRetornaPrazoSemExecutarProvedorENaoApagaConsumoDeFalhas() {
+        AtomicLong now = new AtomicLong();
+        TwelveDataLimitador gate = new TwelveDataLimitador(1, 60_000, 100, 1000, now::get, now::addAndGet);
+        assertThatThrownBy(() -> gate.executar(() -> { throw new IllegalStateException("falha de rede"); }))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> gate.executar(() -> { fail("Não pode consultar sem cota"); return 0; }))
+                .isExactlyInstanceOf(AguardarCotaException.class)
+                .satisfies(erro -> assertThat(((AguardarCotaException) erro).getTentarAposSegundos()).isEqualTo(61));
+        assertThat(now.get()).isZero();
+        now.set(TimeUnit.MILLISECONDS.toNanos(60_100));
+        assertThat(gate.executar(() -> 42)).isEqualTo(42);
     }
 
     @Test
