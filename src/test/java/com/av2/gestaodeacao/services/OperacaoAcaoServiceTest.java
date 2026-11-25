@@ -5,6 +5,7 @@ import com.av2.gestaodeacao.domains.Acao;
 import com.av2.gestaodeacao.domains.OperacaoAcao;
 import com.av2.gestaodeacao.domains.dtos.ResumoCarteiraDTO;
 import com.av2.gestaodeacao.domains.enums.TipoOperacao;
+import com.av2.gestaodeacao.domains.enums.Papel;
 import com.av2.gestaodeacao.exceptions.ConflitoException;
 import com.av2.gestaodeacao.exceptions.EntradaOuOperacaoInvalidaException;
 import com.av2.gestaodeacao.exceptions.RecursoNaoEncontradoException;
@@ -13,10 +14,15 @@ import com.av2.gestaodeacao.repositories.OperacaoAcaoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import com.av2.gestaodeacao.domains.Usuario;
 import com.av2.gestaodeacao.repositories.UsuarioRepository;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -37,6 +43,7 @@ class OperacaoAcaoServiceTest {
     private AcaoRepository acaoRepository;
     private OperacaoAcaoRepository operacaoRepository;
     private TwelveDataCliente twelveDataCliente;
+    private UsuarioRepository usuarioRepository;
     private OperacaoAcaoService service;
 
     @BeforeEach
@@ -48,13 +55,15 @@ class OperacaoAcaoServiceTest {
         ReflectionTestUtils.setField(service, "repository", acaoRepository);
         ReflectionTestUtils.setField(service, "operacaoRepository", operacaoRepository);
         ReflectionTestUtils.setField(service, "twelveDataCliente", twelveDataCliente);
-        UsuarioRepository usuarios = mock(UsuarioRepository.class);
+        usuarioRepository = mock(UsuarioRepository.class);
         Usuario usuario = new Usuario();
         usuario.setId(1L);
+        usuario.setUsername("investidor_teste");
+        usuario.setPapel(Papel.USER);
         usuario.setAtivo(true);
-        when(usuarios.findByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
-        when(usuarios.findForUpdateByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
-        ReflectionTestUtils.setField(service, "usuarioRepository", usuarios);
+        when(usuarioRepository.findByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findForUpdateByUsername("investidor_teste")).thenReturn(Optional.of(usuario));
+        ReflectionTestUtils.setField(service, "usuarioRepository", usuarioRepository);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("investidor_teste", null, List.of()));
         when(operacaoRepository.save(any(OperacaoAcao.class)))
@@ -64,6 +73,163 @@ class OperacaoAcaoServiceTest {
     @AfterEach
     void limparAutenticacao() {
         SecurityContextHolder.clearContext();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "consulta sem credenciais,false,false",
+            "consulta nao autenticada,false,true",
+            "compra sem credenciais,true,false",
+            "compra nao autenticada,true,true"
+    })
+    void autenticacaoObrigatoriaImpedeConsultarOuPersistirOperacoes(
+            String cenario, boolean compra, boolean possuiAuthentication) {
+        SecurityContextHolder.clearContext();
+        if (possuiAuthentication) {
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken("investidor_teste", null);
+            assertThat(authentication.isAuthenticated()).isFalse();
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        }
+        if (compra) {
+            when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao(1L, 30.0)));
+        }
+        Runnable chamada = compra ? () -> service.comprar(1L, 1) : () -> service.listar();
+
+        assertThatThrownBy(chamada::run)
+                .isExactlyInstanceOf(AuthenticationCredentialsNotFoundException.class)
+                .hasMessage("Autenticação necessária");
+        verifyNoInteractions(usuarioRepository, operacaoRepository, twelveDataCliente);
+        if (!compra) {
+            verifyNoInteractions(acaoRepository);
+        }
+    }
+
+    @ParameterizedTest(name = "{0} / usuario existente: {2}")
+    @CsvSource({"consulta,false,false", "consulta,false,true", "compra,true,false", "compra,true,true"})
+    void usuarioAusenteOuInativoNaoAcessaOperacoes(
+            String cenario, boolean compra, boolean existente) {
+        Usuario inativo = new Usuario();
+        inativo.setId(1L);
+        inativo.setUsername("investidor_teste");
+        inativo.setPapel(Papel.USER);
+        inativo.setAtivo(false);
+        Optional<Usuario> resultado = existente ? Optional.of(inativo) : Optional.empty();
+        when(usuarioRepository.findByUsername("investidor_teste")).thenReturn(resultado);
+        when(usuarioRepository.findForUpdateByUsername("investidor_teste")).thenReturn(resultado);
+        if (compra) {
+            when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao(1L, 30.0)));
+        }
+        Runnable chamada = compra ? () -> service.comprar(1L, 1) : () -> service.listar();
+
+        assertThatThrownBy(chamada::run)
+                .isExactlyInstanceOf(AuthenticationCredentialsNotFoundException.class)
+                .hasMessage("Usuário indisponível");
+        verifyNoInteractions(operacaoRepository, twelveDataCliente);
+        if (compra) {
+            verify(usuarioRepository).findForUpdateByUsername("investidor_teste");
+            verify(usuarioRepository, never()).findByUsername("investidor_teste");
+        } else {
+            verify(usuarioRepository).findByUsername("investidor_teste");
+            verify(usuarioRepository, never()).findForUpdateByUsername("investidor_teste");
+            verifyNoInteractions(acaoRepository);
+        }
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(ints = {-1})
+    void quantidadeNulaOuNegativaImpedeCompraEVendaAntesDasConsultas(Integer quantidade) {
+        assertThatThrownBy(() -> service.comprar(1L, quantidade))
+                .isExactlyInstanceOf(EntradaOuOperacaoInvalidaException.class)
+                .hasMessage("Quantidade deve ser positiva");
+        assertThatThrownBy(() -> service.vender(1L, quantidade, 10.0))
+                .isExactlyInstanceOf(EntradaOuOperacaoInvalidaException.class)
+                .hasMessage("Quantidade deve ser positiva");
+        verifyNoInteractions(acaoRepository, usuarioRepository, operacaoRepository, twelveDataCliente);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(doubles = {-1, 0, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
+    void precoDeVendaNuloOuInvalidoNaoConsultaNemPersiste(Double preco) {
+        assertThatThrownBy(() -> service.vender(1L, 1, preco))
+                .isExactlyInstanceOf(EntradaOuOperacaoInvalidaException.class)
+                .hasMessage("Preço de venda deve ser positivo");
+        verifyNoInteractions(acaoRepository, usuarioRepository, operacaoRepository, twelveDataCliente);
+    }
+
+    @Test
+    void compraSemPrecoInformadoEComCotacaoNulaNaoPersiste() {
+        when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao(1L, null)));
+
+        assertThatThrownBy(() -> service.comprar(1L, 1))
+                .isExactlyInstanceOf(EntradaOuOperacaoInvalidaException.class)
+                .hasMessage("A cotação atual deve ser positiva");
+        verifyNoInteractions(usuarioRepository, operacaoRepository, twelveDataCliente);
+    }
+
+    @Test
+    void precoDeCompraExplicitoPermiteOperarSemCotacaoAtual() {
+        Acao acao = acao(1L, null);
+        when(acaoRepository.findById(1L)).thenReturn(Optional.of(acao));
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.COMPRA, 1L))
+                .thenReturn(List.of());
+        when(operacaoRepository.findByAcaoAndTipoOperacaoAndUsuarioId(acao, TipoOperacao.VENDA, 1L))
+                .thenReturn(List.of());
+
+        OperacaoAcao resultado = service.comprar(1L, 2, 1.25);
+
+        assertThat(resultado.getUsuario().getId()).isEqualTo(1);
+        assertThat(resultado.getQuantidade()).isEqualTo(2);
+        assertThat(resultado.getPrecoUnitario()).isEqualTo(1.25);
+        assertThat(resultado.getPrecoMedio()).isEqualTo(1.25);
+        assertThat(resultado.getValorTotal()).isEqualTo(2.50);
+        verify(operacaoRepository).save(resultado);
+        verifyNoInteractions(twelveDataCliente);
+    }
+
+    @Test
+    void resumoDesconsideraReferenciasIncompletasSemAlterarPosicaoValida() {
+        // Defesa do resumo contra dados incompletos retornados pelo repositório.
+        // Esses registros não são gravados nem apresentados como cadastros válidos da API.
+        Acao valida = acao(1L, 30.0);
+        OperacaoAcao compra = operacao(valida, TipoOperacao.COMPRA, 2, 20.0, 20.0);
+        OperacaoAcao semAcao = operacao(null, TipoOperacao.COMPRA, 900, 900.0, 900.0);
+        OperacaoAcao semId = operacao(acao(null, 900.0), TipoOperacao.COMPRA, 900, 900.0, 900.0);
+        when(operacaoRepository.findByUsuarioId(1L)).thenReturn(List.of(semAcao, semId, compra));
+
+        ResumoCarteiraDTO resumo = service.resumirCarteira();
+
+        assertThat(resumo.posicoes()).hasSize(1);
+        assertThat(resumo.posicoes().get(0).acaoId()).isEqualTo(1);
+        assertThat(resumo.quantidadeTotal()).isEqualTo(2);
+        assertThat(resumo.precoMedioCarteira()).isEqualTo(20.0);
+        assertThat(resumo.custoTotalCarteira()).isEqualTo(40.0);
+        assertThat(resumo.valorAtualCarteira()).isEqualTo(60.0);
+        verify(operacaoRepository).findByUsuarioId(1L);
+        verify(operacaoRepository, never()).save(any());
+        verifyNoInteractions(acaoRepository, twelveDataCliente);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "  ", "bRl"})
+    void moedaVaziaOuRealNaoConsomeConsultaDeCambio(String moeda) {
+        Acao acao = acao(1L, 30.0);
+        acao.setMoeda(moeda);
+        when(operacaoRepository.findByUsuarioId(1L))
+                .thenReturn(List.of(operacao(acao, TipoOperacao.COMPRA, 2, 20.0, 20.0)));
+
+        ResumoCarteiraDTO resumo = service.resumirCarteira();
+
+        assertThat(resumo.posicoes()).hasSize(1);
+        assertThat(resumo.posicoes().get(0).cotacaoAtual()).isEqualTo(30.0);
+        assertThat(resumo.posicoes().get(0).precoMedio()).isEqualTo(20.0);
+        assertThat(resumo.quantidadeTotal()).isEqualTo(2);
+        assertThat(resumo.custoTotalCarteira()).isEqualTo(40.0);
+        assertThat(resumo.valorAtualCarteira()).isEqualTo(60.0);
+        verifyNoInteractions(twelveDataCliente);
+        verify(operacaoRepository, never()).save(any());
     }
 
     @Test

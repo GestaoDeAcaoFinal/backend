@@ -6,13 +6,13 @@ A meta global (`BUNDLE`) é de pelo menos 85% das linhas e 85% dos branches. As 
 
 | Indicador | Antes | Primeira ampliação | Atual |
 | --- | --- | --- | --- |
-| Testes | 187 | 260 | 289 |
-| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 818/836 — 97,85% |
-| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 316/340 — 92,94% |
+| Testes | 187 | 260 | 311 |
+| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 819/836 — 97,97% |
+| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 323/340 — 95,00% |
 | Classes analisadas | 57 | 57 | 57 |
 | `clean verify` com limite 85/85 | Falha de cobertura | Sucesso | Sucesso |
 
-O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26 e o de cliente.support acrescentou três, verificando decisões já implementadas.
+O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, o de cliente.support acrescentou três e o de operações acrescentou 22, verificando decisões já implementadas.
 
 ## Casos acrescentados
 
@@ -47,6 +47,20 @@ O pacote passou de 37/40 branches para **40/40 branches (100%)**. As 47 linhas e
 - `ProvedorHttpExecutorTest`: dois casos de HTTP429 sem `Retry-After`, com cabeçalhos nulos ou existentes. Verificam a espera padrão de 60 segundos, a classificação como limite, a mensagem sem corpo sensível e a ausência de repetição automática da chamada.
 
 Os 16 testes focados passaram, assim como o `clean verify` completo com 289 testes. A revisão independente não identificou problemas. Não houve alterações na política de consultas nem na implementação dos clientes.
+
+## Complemento de OperacaoAcaoService — 25/11/2026
+
+A classe passou de 41/48 branches e 148/149 linhas para **48/48 branches e 149/149 linhas (100%)**. Suas 729 instruções também ficaram totalmente cobertas.
+
+Os 22 novos casos de `OperacaoAcaoServiceTest` verificam:
+
+- Ausência de autenticação, sessão não autenticada e usuário ausente/inativo, tanto na consulta quanto na compra. Confirmam a rejeição antes de acessar operações ou persistir dados e o uso da busca com bloqueio na escrita.
+- Quantidades nulas/negativas e preços nulos, negativos, zero ou não finitos, com mensagens específicas e ausência de persistência.
+- Compra sem cotação disponível: rejeição quando nenhum preço é informado e aceitação de preço explícito válido, preservando proprietário, quantidade e totais.
+- Resumo que ignora referências incompletas retornadas pelo repositório e mantém os totais da posição válida. São fixtures defensivas em memória, não registros inseridos no banco ou aceitos pela API.
+- Moeda vazia/em branco e BRL sem distinção de maiúsculas/minúsculas, sem consumo do provedor de câmbio e com valores financeiros preservados.
+
+Os 40 testes focados passaram. O `clean verify` completo passou com 311 testes, zero falhas, erros ou testes ignorados, mantendo os limites globais 85/85. A revisão independente não identificou problemas. Nenhuma regra de operação, autenticação ou isolamento foi modificada.
 
 ## Como reproduzir
 
