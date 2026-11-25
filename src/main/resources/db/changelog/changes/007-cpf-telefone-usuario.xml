@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="007-cpf-telefone-usuario" author="codex">
+        <!-- Sem dados inventados: legado pode conter NULL até a próxima edição. -->
+        <addColumn tableName="usuario">
+            <column name="cpf" type="VARCHAR(11)"/>
+            <column name="telefone" type="VARCHAR(11)"/>
+        </addColumn>
+        <addUniqueConstraint tableName="usuario" columnNames="cpf" constraintName="uk_usuario_cpf"/>
+        <rollback>
+            <dropUniqueConstraint tableName="usuario" constraintName="uk_usuario_cpf"/>
+            <dropColumn tableName="usuario" columnName="telefone"/>
+            <dropColumn tableName="usuario" columnName="cpf"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

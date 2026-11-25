@@ -6,6 +6,8 @@ public record UsuarioResponse(
         Long id,
         String username,
         Papel papel,
-        Boolean ativo
+        Boolean ativo,
+        String cpf,
+        String telefone
 ) {
 }

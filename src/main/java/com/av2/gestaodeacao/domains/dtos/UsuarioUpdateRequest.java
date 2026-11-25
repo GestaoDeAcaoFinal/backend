@@ -13,6 +13,14 @@ public record UsuarioUpdateRequest(
         Papel papel,
 
         @NotNull
-        Boolean ativo
+        Boolean ativo,
+
+        @NotBlank(message = "CPF é obrigatório")
+        @Size(max = 14, message = "Informe um CPF válido com 11 dígitos")
+        String cpf,
+
+        @NotBlank(message = "Telefone com DDD é obrigatório")
+        @Size(max = 15, message = "Informe um telefone válido com DDD")
+        String telefone
 ) {
 }

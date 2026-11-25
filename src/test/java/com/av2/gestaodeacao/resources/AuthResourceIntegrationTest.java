@@ -182,7 +182,7 @@ class AuthResourceIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"username":"integracao_jwt_admin","papel":"USER","ativo":true}
+                            {"username":"integracao_jwt_admin","cpf":"52998224725","telefone":"11999999999","papel":"USER","ativo":true}
                             """))
                 .andExpect(status().isConflict());
         assertThat(jdbcTemplate.queryForObject("SELECT papel FROM usuario WHERE id = 999999", String.class))
@@ -198,7 +198,7 @@ class AuthResourceIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"username":"integracao_jwt_admin","papel":"ADMIN","ativo":false}
+                            {"username":"integracao_jwt_admin","cpf":"52998224725","telefone":"11999999999","papel":"ADMIN","ativo":false}
                             """))
                 .andExpect(status().isConflict());
         assertThat(jdbcTemplate.queryForObject("SELECT ativo FROM usuario WHERE id = 999999", Boolean.class))

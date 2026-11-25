@@ -5,6 +5,9 @@ import com.av2.gestaodeacao.domains.Usuario;
 import com.av2.gestaodeacao.domains.enums.Papel;
 import com.av2.gestaodeacao.repositories.UsuarioRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -27,6 +30,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class UsuarioResourceIntegrationTest {
 
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void conflitoDeCpfNoBancoNaoRegistraDadosPessoais(CapturedOutput output) {
+        Usuario primeiro = criarUsuarioDeTeste();
+        primeiro.setCpf("52998224725");
+        primeiro.setTelefone("11999999999");
+        usuarioRepository.saveAndFlush(primeiro);
+        Usuario segundo = criarUsuarioDeTeste();
+        segundo.setCpf("52998224725");
+        segundo.setTelefone("11999999999");
+
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> usuarioRepository.saveAndFlush(segundo)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThat(output.getAll()).doesNotContain("52998224725", "11999999999");
+    }
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -39,6 +58,30 @@ class UsuarioResourceIntegrationTest {
     private String novoUsername() {
         return "teste_" + UUID.randomUUID()
                 .toString().replace("-", "");
+    }
+
+    @Test
+    void exigeCpfETelefoneNoCadastroENaEdicaoDeContaLegada() throws Exception {
+        String corpo = """
+                {"username":"%s","password":"SenhaForte123!","papel":"USER","ativo":true}
+                """.formatted(novoUsername());
+        mockMvc.perform(post("/api/usuarios").with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isBadRequest());
+        Usuario legado = criarUsuarioDeTeste();
+        mockMvc.perform(put("/api/usuarios/{id}", legado.getId()).with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejeitaCpfInvalidoMesmoComTelefoneValido() throws Exception {
+        mockMvc.perform(post("/api/usuarios").with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"username":"%s","password":"SenhaForte123!","papel":"USER",
+                         "cpf":"111.111.111-11","telefone":"(11) 99999-9999"}
+                        """.formatted(novoUsername())))
+                .andExpect(status().isBadRequest());
     }
 
     private Usuario criarUsuarioDeTeste() {
@@ -62,7 +105,7 @@ class UsuarioResourceIntegrationTest {
                                 {
                                   "username": "%s",
                                   "password": "SenhaForte123!",
-                                  "papel": "USER"
+                                  "cpf": "529.982.247-25", "telefone": "(11) 99999-9999", "papel": "USER"
                                 }
                                 """.formatted(username)))
                 .andExpect(status().isCreated())
@@ -72,7 +115,41 @@ class UsuarioResourceIntegrationTest {
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.senha").doesNotExist());
 
-        assertThat(usuarioRepository.findByUsername(username)).isPresent();
+        Usuario salvo = usuarioRepository.findByUsername(username).orElseThrow();
+        assertThat(salvo.getCpf()).isEqualTo("52998224725");
+        assertThat(salvo.getTelefone()).isEqualTo("11999999999");
+    }
+
+    @Test
+    void cpfUnicoRejeitaNovoCadastroEEdicaoDeOutraConta() throws Exception {
+        Usuario existente = criarUsuarioDeTeste();
+        existente.setCpf("52998224725");
+        usuarioRepository.saveAndFlush(existente);
+        String corpo = """
+                {"username":"%s","password":"SenhaForte123!","papel":"USER","ativo":true,
+                 "cpf":"529.982.247-25","telefone":"(11) 99999-9999"}
+                """.formatted(novoUsername());
+        mockMvc.perform(post("/api/usuarios").with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("CPF já cadastrado em outra conta"));
+        Usuario legado = criarUsuarioDeTeste();
+        mockMvc.perform(put("/api/usuarios/{id}", legado.getId()).with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict());
+        assertThat(legado.getCpf()).isNull();
+    }
+
+    @Test
+    void exigeTelefoneComDddValidoSemPersistir() throws Exception {
+        String username = novoUsername();
+        mockMvc.perform(post("/api/usuarios").with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"username":"%s","password":"SenhaForte123!","papel":"USER",
+                         "cpf":"52998224725","telefone":"20999999999"}
+                        """.formatted(username)))
+                .andExpect(status().isBadRequest());
+        assertThat(usuarioRepository.findByUsername(username)).isEmpty();
     }
 
     @Test
@@ -89,7 +166,7 @@ class UsuarioResourceIntegrationTest {
                                 {
                                   "username": "%s",
                                   "password": "%s",
-                                  "papel": "USER"
+                                  "cpf": "529.982.247-25", "telefone": "(11) 99999-9999", "papel": "USER"
                                 }
                                 """.formatted(username, senhaOriginal)))
                 .andExpect(status().isCreated());
@@ -147,7 +224,7 @@ class UsuarioResourceIntegrationTest {
                         .content("""
                                 {
                                   "username": "%s",
-                                  "papel": "ADMIN",
+                                  "cpf": "529.982.247-25", "telefone": "(11) 99999-9999", "papel": "ADMIN",
                                   "ativo": false
                                 }
                                 """.formatted(usuario.getUsername())))
@@ -209,7 +286,7 @@ class UsuarioResourceIntegrationTest {
                                 {
                                   "username": "usuario_sem_permissao",
                                   "password": "SenhaForte123!",
-                                  "papel": "USER"
+                                  "cpf": "529.982.247-25", "telefone": "(11) 99999-9999", "papel": "USER"
                                 }
                                 """))
                 .andExpect(status().isForbidden());

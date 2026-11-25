@@ -15,7 +15,15 @@ public record UsuarioCreateRequest(
         String password,
 
         @NotNull
-        Papel papel
+        Papel papel,
+
+        @NotBlank(message = "CPF é obrigatório")
+        @Size(max = 14, message = "Informe um CPF válido com 11 dígitos")
+        String cpf,
+
+        @NotBlank(message = "Telefone com DDD é obrigatório")
+        @Size(max = 15, message = "Informe um telefone válido com DDD")
+        String telefone
 ) {
 
 }

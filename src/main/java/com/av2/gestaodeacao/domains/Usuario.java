@@ -19,6 +19,18 @@ public class Usuario {
     @Column(nullable = false, unique = true, length = 100)
     private String username;
 
+    // Anuláveis apenas para contas anteriores à migração 007 e ao completar o cadastro.
+    @Column(length = 11, unique = true)
+    private String cpf;
+
+    @Column(length = 11)
+    private String telefone;
+
+    public String getCpf() { return cpf; }
+    public void setCpf(String cpf) { this.cpf = cpf; }
+    public String getTelefone() { return telefone; }
+    public void setTelefone(String telefone) { this.telefone = telefone; }
+
     @Column(nullable = false, length = 100)
     private String senha;
 

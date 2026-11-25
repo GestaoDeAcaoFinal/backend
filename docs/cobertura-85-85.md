@@ -4,6 +4,8 @@ A meta global (`BUNDLE`) é de pelo menos 85% das linhas e 85% dos branches. As 
 
 ## Resultado medido
 
+Esta tabela registra a ampliação de testes anterior à funcionalidade de CPF/telefone. Para a medição posterior com 376 testes e novas linhas de produção, consulte [Cadastro de perfil](cadastro-perfil.md).
+
 | Indicador | Antes | Primeira ampliação | Atual |
 | --- | --- | --- | --- |
 | Testes | 187 | 260 | 334 |
