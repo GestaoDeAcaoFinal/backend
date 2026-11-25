@@ -6,13 +6,13 @@ A meta global (`BUNDLE`) é de pelo menos 85% das linhas e 85% dos branches. As 
 
 | Indicador | Antes | Primeira ampliação | Atual |
 | --- | --- | --- | --- |
-| Testes | 187 | 260 | 329 |
-| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 824/836 — 98,56% |
-| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 333/340 — 97,94% |
+| Testes | 187 | 260 | 334 |
+| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 825/836 — 98,68% |
+| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 334/340 — 98,24% |
 | Classes analisadas | 57 | 57 | 57 |
 | `clean verify` com limite 85/85 | Falha de cobertura | Sucesso | Sucesso |
 
-O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, o de cliente.support acrescentou três, o de operações acrescentou 22 e o de CVM acrescentou 18, verificando decisões já implementadas.
+O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, o de cliente.support acrescentou três, o de operações acrescentou 22, o de CVM acrescentou 18 e o de UsuarioDetailsService acrescentou cinco, verificando decisões já implementadas.
 
 ## Casos acrescentados
 
@@ -78,6 +78,16 @@ O pacote passou de 73/79 linhas e 29/40 branches para **78/79 linhas (98,73%) e 
 O único ramo e a única linha restantes no parser são o tratamento de uma string iniciada por `U+FEFF`. A decodificação fixa Windows-1252 não produz esse caractere; um BOM UTF-8 real é decodificado como `ï»¿`, cujo tratamento foi exercitado. Não foram alteradas a codificação, a implementação ou as exclusões do JaCoCo para forçar 100%.
 
 Os 24 testes focados de CVM passaram, assim como o `clean verify` completo com 329 testes, zero falhas, erros ou testes ignorados. A revisão independente não identificou problemas. Nenhuma consulta à CVM ou ao banco de desenvolvimento foi realizada.
+
+## Complemento de UsuarioDetailsService — 25/11/2026
+
+A classe atingiu **11/11 linhas, 2/2 branches e 44/44 instruções (100%)**.
+
+`UsuarioDetailsServiceTest` acrescenta cinco casos: usuário inexistente lança `UsernameNotFoundException` com mensagem sem o identificador consultado; as quatro combinações ADMIN/USER e ativo/inativo preservam username, hash e autoridade exata e retornam o estado `enabled` correspondente. Também verificam que carregar os detalhes não altera os campos da entidade nem sua versão de sessão e não persiste dados.
+
+Conta inativa é retornada como `UserDetails` desabilitado; a recusa de autenticação continua sob responsabilidade do Spring Security. O teste usa serviço real, repositório simulado e hash fictício, sem consultar contas reais.
+
+Os cinco testes focados e o `clean verify` completo com 334 testes passaram, sem falhas, erros ou testes ignorados. A revisão independente não identificou problemas. Código de produção, regras de autenticação e limites de cobertura permaneceram inalterados.
 
 ## Como reproduzir
 
