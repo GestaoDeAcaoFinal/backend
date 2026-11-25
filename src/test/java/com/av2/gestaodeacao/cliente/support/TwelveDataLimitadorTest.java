@@ -11,6 +11,53 @@ import static org.assertj.core.api.Assertions.*;
 
 class TwelveDataLimitadorTest {
     @Test
+    void consultaConcorrenteExpiraSemExecutarProvedorETravaPodeSerReutilizada() throws Exception {
+        AtomicLong now = new AtomicLong();
+        TwelveDataLimitador gate = new TwelveDataLimitador(8, 8, 0, 200, now::get, now::addAndGet);
+        CountDownLatch entrouNoProvedor = new CountDownLatch(1);
+        CountDownLatch liberarProvedor = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean segundaConsultaExecutada =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Future<Integer> primeira = pool.submit(() -> gate.executar(() -> {
+            entrouNoProvedor.countDown();
+            try {
+                if (!liberarProvedor.await(10, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Primeiro provedor não foi liberado");
+                }
+            } catch (InterruptedException erro) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Primeiro provedor interrompido", erro);
+            }
+            return 1;
+        }));
+        try {
+            assertThat(entrouNoProvedor.await(3, TimeUnit.SECONDS)).isTrue();
+            Future<Integer> segunda = pool.submit(() -> gate.executar(() -> {
+                segundaConsultaExecutada.set(true);
+                return 2;
+            }));
+
+            assertThatThrownBy(() -> segunda.get(3, TimeUnit.SECONDS))
+                    .isInstanceOfSatisfying(ExecutionException.class, erro ->
+                            assertThat(erro.getCause())
+                                    .isExactlyInstanceOf(ProvedorIndisponivelException.class)
+                                    .hasMessageContaining("consultas em andamento"));
+            assertThat(segundaConsultaExecutada.get()).isFalse();
+            assertThat(primeira.isDone()).isFalse();
+            assertThat(liberarProvedor.getCount()).isEqualTo(1);
+
+            liberarProvedor.countDown();
+            assertThat(primeira.get(3, TimeUnit.SECONDS)).isEqualTo(1);
+            assertThat(gate.executar(() -> 42)).isEqualTo(42);
+        } finally {
+            liberarProvedor.countDown();
+            pool.shutdownNow();
+            assertThat(pool.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
     void esperaPelaCotaTambemEhLimitada() {
         AtomicLong now = new AtomicLong();
         TwelveDataLimitador gate = new TwelveDataLimitador(1, 60_000, 100, 1000, now::get, now::addAndGet);
