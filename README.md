@@ -123,8 +123,8 @@ SoftwareGestaoDeAcao/
 
 Revisões mínimas compatíveis para este conjunto:
 
-- Backend `GestaoDeAcao`: `05f2735b5c24790ef61e4e1830dd89eed1d43b87`, que inclui o Dockerfile, os perfis Spring e a API da carteira; use esta revisão do README/Compose ou um descendente compatível para obter a publicação apenas em localhost.
-- Frontend `gestao-acao-front`: `26bc4517c4a9b0a2c25258e6537a69b6700b1e96`, que inclui a imagem Nginx, o proxy `/api` e a integração da carteira, ou um descendente compatível.
+- Backend `GestaoDeAcao`: `7cf4ee96ba3e1e7c487d19d1cb997faf9efb3c63` ou descendente compatível, com CPF/telefone, migração007 e protocolo de espera por cota local.
+- Frontend `gestao-acao-front`: `9fa8996b4f041eaa61a42c0c5b3b29f269148449` ou descendente compatível, com os campos de perfil e o agendamento independente de cotações. A referência testada pelo CI do frontend fica em `.ci/backend-ref.txt` nesse repositório.
 
 Execute os comandos abaixo a partir do diretório `GestaoDeAcao`. As portas do perfil `host-postgresql` são publicadas somente em `127.0.0.1`; `APP_PORT` e `FRONTEND_PORT` permitem alterar os números das portas.
 
