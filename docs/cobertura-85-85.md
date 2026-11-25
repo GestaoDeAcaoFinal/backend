@@ -6,13 +6,13 @@ A meta global (`BUNDLE`) é de pelo menos 85% das linhas e 85% dos branches. As 
 
 | Indicador | Antes | Primeira ampliação | Atual |
 | --- | --- | --- | --- |
-| Testes | 187 | 260 | 311 |
-| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 819/836 — 97,97% |
-| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 323/340 — 95,00% |
+| Testes | 187 | 260 | 329 |
+| Linhas | 785/836 — 93,90% | 800/836 — 95,69% | 824/836 — 98,56% |
+| Branches | 248/340 — 72,94% | 303/340 — 89,12% | 333/340 — 97,94% |
 | Classes analisadas | 57 | 57 | 57 |
 | `clean verify` com limite 85/85 | Falha de cobertura | Sucesso | Sucesso |
 
-O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, o de cliente.support acrescentou três e o de operações acrescentou 22, verificando decisões já implementadas.
+O denominador da medição não foi reduzido: nenhuma classe foi excluída e nenhum arquivo de produção foi alterado. A primeira ampliação acrescentou 73 casos; o complemento de config acrescentou 26, o de cliente.support acrescentou três, o de operações acrescentou 22 e o de CVM acrescentou 18, verificando decisões já implementadas.
 
 ## Casos acrescentados
 
@@ -61,6 +61,23 @@ Os 22 novos casos de `OperacaoAcaoServiceTest` verificam:
 - Moeda vazia/em branco e BRL sem distinção de maiúsculas/minúsculas, sem consumo do provedor de câmbio e com valores financeiros preservados.
 
 Os 40 testes focados passaram. O `clean verify` completo passou com 311 testes, zero falhas, erros ou testes ignorados, mantendo os limites globais 85/85. A revisão independente não identificou problemas. Nenhuma regra de operação, autenticação ou isolamento foi modificada.
+
+## Complemento do pacote services.cvm — 25/11/2026
+
+O pacote passou de 73/79 linhas e 29/40 branches para **78/79 linhas (98,73%) e 39/40 branches (97,50%)**.
+
+| Classe | Linhas | Branches |
+| --- | --- | --- |
+| `CadastroCvmParser` | 51/52 — 98,08% | 25/26 — 96,15% |
+| `CadastroCvmCache` | 26/26 — 100% | 14/14 — 100% |
+| `CadastroCvmCache.Snapshot` | 1/1 — 100% | Não possui branches |
+
+- `CadastroCvmParserTest`: 11 novos casos para ZIP nulo/vazio, diretórios e arquivos irrelevantes antes do CSV em subpasta, BOM UTF-8, ausência de CNPJ no cabeçalho, CNPJ ativo com quantidade incorreta de dígitos, aspas sem fechamento, cadastro vazio, deduplicação e normalização da situação. Usam ZIPs em memória e o parser real; as falhas têm mensagem pública sem conteúdo do arquivo.
+- `CadastroCvmCacheTest`: sete novos casos para TTL nulo/zero/negativo, reutilização até um nanossegundo antes da expiração e recarga no limite exato, recuperação após falha inicial, falha de parsing após expiração sem devolver dados vencidos e dois leitores concorrentes compartilhando um único download e snapshot imutável. A concorrência tem prazos e encerramento das threads, sem `Thread.sleep` ou acesso a métodos privados.
+
+O único ramo e a única linha restantes no parser são o tratamento de uma string iniciada por `U+FEFF`. A decodificação fixa Windows-1252 não produz esse caractere; um BOM UTF-8 real é decodificado como `ï»¿`, cujo tratamento foi exercitado. Não foram alteradas a codificação, a implementação ou as exclusões do JaCoCo para forçar 100%.
+
+Os 24 testes focados de CVM passaram, assim como o `clean verify` completo com 329 testes, zero falhas, erros ou testes ignorados. A revisão independente não identificou problemas. Nenhuma consulta à CVM ou ao banco de desenvolvimento foi realizada.
 
 ## Como reproduzir
 
