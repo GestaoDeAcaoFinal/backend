@@ -17,4 +17,5 @@
     <include file="changes/005-proprietario-operacao.xml" relativeToChangelogFile="true"/>
     <include file="changes/006-versao-sessao.xml" relativeToChangelogFile="true"/>
     <include file="changes/007-cpf-telefone-usuario.xml" relativeToChangelogFile="true"/>
+    <include file="changes/008-telefone-unico.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

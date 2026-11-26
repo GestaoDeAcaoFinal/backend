@@ -30,6 +30,38 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class UsuarioServiceTest {
+
+    @Test
+    void telefoneDuplicadoImpedeCriacaoEEdicaoAntesDePersistir() {
+        Usuario outro = criarUsuario(2L, "outro");
+        outro.setAtivo(false);
+        when(usuarioRepository.findByTelefone("17999998888")).thenReturn(Optional.of(outro));
+        assertThatThrownBy(() -> usuarioService.create(new UsuarioCreateRequest(
+                "novo", "senha-segura", Papel.USER, "52998224725", "(17) 99999-8888")))
+                .isInstanceOf(ConflitoException.class).hasMessage("Telefone já cadastrado em outra conta");
+        Usuario alvo = criarUsuario(1L, "ana");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(alvo));
+        assertThatThrownBy(() -> usuarioService.update(1L, new UsuarioUpdateRequest(
+                "ana", Papel.USER, true, "52998224725", "17999998888")))
+                .isInstanceOf(ConflitoException.class).hasMessage("Telefone já cadastrado em outra conta");
+        verify(usuarioRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(passwordEncoder);
+        assertThat(alvo.getTelefone()).isNull();
+    }
+
+    @Test
+    void proprioTelefoneNormalizadoPodeSerMantido() {
+        Usuario alvo = criarUsuario(1L, "ana");
+        alvo.setTelefone("17999998888");
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(alvo));
+        when(usuarioRepository.findByTelefone("17999998888")).thenReturn(Optional.of(alvo));
+        when(usuarioRepository.saveAndFlush(alvo)).thenReturn(alvo);
+        UsuarioResponse resposta = usuarioService.update(1L, new UsuarioUpdateRequest(
+                "ana", Papel.USER, true, "52998224725", "(17) 99999-8888"));
+        assertThat(resposta.telefone()).isEqualTo("17999998888");
+        assertThat(alvo.getVersaoSessao()).isZero();
+    }
+
     @Test
     void cpfDuplicadoImpedeCriacaoEEdicaoAntesDePersistir() {
         Usuario existente = criarUsuario(2L, "outro");

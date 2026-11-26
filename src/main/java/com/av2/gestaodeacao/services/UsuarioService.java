@@ -41,6 +41,7 @@ public class UsuarioService {
         String cpf = DadosUsuarioNormalizer.cpf(request.cpf());
         String telefone = DadosUsuarioNormalizer.telefone(request.telefone());
         validarCpfDisponivel(cpf, null);
+        validarTelefoneDisponivel(telefone, null);
 
         Usuario usuario = new Usuario();
         usuario.setUsername(request.username());
@@ -64,6 +65,7 @@ public class UsuarioService {
         String cpf = DadosUsuarioNormalizer.cpf(request.cpf());
         String telefone = DadosUsuarioNormalizer.telefone(request.telefone());
         validarCpfDisponivel(cpf, id);
+        validarTelefoneDisponivel(telefone, id);
 
         if (usuario.getPapel() == Papel.ADMIN && Boolean.TRUE.equals(usuario.getAtivo())
                 && (request.papel() != Papel.ADMIN || !Boolean.TRUE.equals(request.ativo()))
@@ -145,13 +147,21 @@ public class UsuarioService {
         });
     }
 
+    private void validarTelefoneDisponivel(String telefone, Long idAtual) {
+        usuarioRepository.findByTelefone(telefone).ifPresent(existente -> {
+            if (!existente.getId().equals(idAtual)) {
+                throw new ConflitoException("Telefone já cadastrado em outra conta");
+            }
+        });
+    }
+
     private Usuario salvarCadastro(Usuario usuario) {
         try {
             return usuarioRepository.saveAndFlush(usuario);
         } catch (DataIntegrityViolationException exception) {
             // Inclui a corrida entre a consulta de disponibilidade e o INSERT/UPDATE.
             log.warn("Cadastro de usuário não salvo por conflito de integridade");
-            throw new ConflitoException("Não foi possível salvar: CPF ou nome de usuário já cadastrado");
+            throw new ConflitoException("Não foi possível salvar: CPF, telefone ou nome de usuário já cadastrado");
         }
     }
 

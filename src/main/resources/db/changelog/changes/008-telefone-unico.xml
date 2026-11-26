@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="008-telefone-unico" author="codex">
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Existem telefones duplicados. Regularize os cadastros antes de aplicar a unicidade; nenhum dado foi removido.">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM (SELECT telefone FROM usuario WHERE telefone IS NOT NULL GROUP BY telefone HAVING COUNT(*) &gt; 1) duplicados</sqlCheck>
+        </preConditions>
+        <addUniqueConstraint tableName="usuario" columnNames="telefone" constraintName="uk_usuario_telefone"/>
+        <rollback>
+            <dropUniqueConstraint tableName="usuario" constraintName="uk_usuario_telefone"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

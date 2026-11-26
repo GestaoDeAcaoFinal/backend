@@ -11,6 +11,7 @@ import java.util.Optional;
 public interface UsuarioRepository  extends JpaRepository<Usuario,Long> {
     Optional<Usuario> findByUsername(String username);
     Optional<Usuario> findByCpf(String cpf);
+    Optional<Usuario> findByTelefone(String telefone);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from Usuario u order by u.id")

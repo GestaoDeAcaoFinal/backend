@@ -23,7 +23,7 @@ public class Usuario {
     @Column(length = 11, unique = true)
     private String cpf;
 
-    @Column(length = 11)
+    @Column(length = 11, unique = true)
     private String telefone;
 
     public String getCpf() { return cpf; }

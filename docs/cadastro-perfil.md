@@ -40,3 +40,12 @@ As migrações foram executadas somente nas bases de teste. Aplicações locais 
 O frontend passou nos **193 testes Angular**, no **build de produção** e nos **17 testes Playwright em Chrome**, usando H2 e provedores simulados. Os fluxos novos de criação, edição, persistência e CPF duplicado foram executados em 1280px e390px; capturas foram inspecionadas visualmente e a ausência de overflow horizontal foi verificada. Os testes existentes de login/permissões, último ADMIN, senha, carteira individual e operações também passaram. O build mantém avisos de depreciação Sass/Bootstrap, sem erros.
 
 O smoke de Docker teve suas fixtures adaptadas ao contrato, mas **não foi executado** nesta etapa. Não houve rebuild de imagem, alteração de container, publicação ou migração de uma base real.
+
+
+## Telefone único — 26/11/2026
+
+O cadastro e a edição rejeitam telefone já vinculado a outra conta, inclusive inativa, com HTTP 409 e a mensagem “Telefone já cadastrado em outra conta”. A comparação ocorre depois da normalização: `(17) 99999-8888` e `17999998888` são o mesmo número. O próprio telefone pode ser mantido na edição ou substituído por um disponível. A unicidade de CPF continua preservada.
+
+A migração 008 adiciona `uk_usuario_telefone` sem modificar a migração 007 já aplicada. Valores nulos de contas legadas continuam permitidos até completar a edição. Se houver duplicidades anteriores, a migração interrompe sem apagar ou escolher dados automaticamente. A restrição do banco cobre também gravações concorrentes que passem pela consulta de disponibilidade; o serviço converte conflito de integridade em HTTP 409 com mensagem segura. A aplicação não comprova existência nem posse do telefone e não envia SMS.
+
+Validação local: `clean verify` aprovou 389 testes e o limite de cobertura 85/85. Novas regressões cobrem criação/edição com máscara, conta inativa, manutenção do próprio número, troca por número disponível, proteção do banco, migração de contas legadas e interrupção segura quando já há números repetidos.

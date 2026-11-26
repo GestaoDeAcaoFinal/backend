@@ -31,6 +31,66 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UsuarioResourceIntegrationTest {
 
     @Test
+    void telefoneUnicoRejeitaCriacaoEEdicaoMesmoComMascaraEContaInativa() throws Exception {
+        Usuario existente = criarUsuarioDeTeste();
+        existente.setTelefone("17999998888");
+        existente.setAtivo(false);
+        usuarioRepository.saveAndFlush(existente);
+        String nome = novoUsername();
+        String corpo = """
+                {"username":"%s","password":"SenhaForte123!","papel":"USER","ativo":true,
+                 "cpf":"52998224725","telefone":"(17) 99999-8888"}
+                """.formatted(nome);
+        mockMvc.perform(post("/api/usuarios").with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Telefone já cadastrado em outra conta"));
+        assertThat(usuarioRepository.findByUsername(nome)).isEmpty();
+        Usuario alvo = criarUsuarioDeTeste();
+        mockMvc.perform(put("/api/usuarios/{id}", alvo.getId()).with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo.replace("(17) 99999-8888", "17999998888")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Telefone já cadastrado em outra conta"));
+        assertThat(alvo.getTelefone()).isNull();
+        assertThat(alvo.getCpf()).isNull();
+    }
+
+    @Test
+    void edicaoMantemProprioCpfETelefoneOuTrocaPorNumeroDisponivel() throws Exception {
+        Usuario alvo = criarUsuarioDeTeste();
+        alvo.setCpf("52998224725");
+        alvo.setTelefone("17999998888");
+        usuarioRepository.saveAndFlush(alvo);
+        String corpo = """
+                {"username":"%s","papel":"USER","ativo":true,
+                 "cpf":"529.982.247-25","telefone":"(17) 99999-8888"}
+                """.formatted(alvo.getUsername());
+        mockMvc.perform(put("/api/usuarios/{id}", alvo.getId()).with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telefone").value("17999998888"));
+        mockMvc.perform(put("/api/usuarios/{id}", alvo.getId()).with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo.replace("(17) 99999-8888", "(21) 3333-4444")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telefone").value("2133334444"));
+        assertThat(usuarioRepository.findById(alvo.getId()).orElseThrow().getTelefone()).isEqualTo("2133334444");
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void bancoImpedeTelefoneDuplicadoSemExporNumeroNosLogs(CapturedOutput output) {
+        Usuario primeiro = criarUsuarioDeTeste();
+        primeiro.setTelefone("17999998888");
+        usuarioRepository.saveAndFlush(primeiro);
+        Usuario segundo = criarUsuarioDeTeste();
+        segundo.setTelefone("17999998888");
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> usuarioRepository.saveAndFlush(segundo)))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThat(output.getAll()).doesNotContain("17999998888");
+    }
+
+
+    @Test
     @ExtendWith(OutputCaptureExtension.class)
     void conflitoDeCpfNoBancoNaoRegistraDadosPessoais(CapturedOutput output) {
         Usuario primeiro = criarUsuarioDeTeste();

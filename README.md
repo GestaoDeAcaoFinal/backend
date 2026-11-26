@@ -288,3 +288,5 @@ Papéis disponíveis:
 
 A documentação detalhada das permissões e decisões de
 segurança está disponível em [Segurança RBAC](docs/seguranca-rbac.md).
+
+A regra de [cadastro de perfil](docs/cadastro-perfil.md) exige CPF e telefone únicos, tanto ao criar quanto ao editar contas. A migração 008 protege a unicidade do telefone também no banco.
